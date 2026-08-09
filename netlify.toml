@@ -1,0 +1,7 @@
+[build]
+  # publish directory for Netlify; root works for a single-page static site
+  publish = "."
+  command = ""
+
+[context.production.environment]
+  NODE_ENV = "production"

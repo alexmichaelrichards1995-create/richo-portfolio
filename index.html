@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Richo — Portfolio</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <h1>Richo</h1>
+      <nav>
+        <a href="#projects">Projects</a>
+        <a href="#about">About</a>
+        <a href="#contact">Contact</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <h2>Hello — I'm Richo</h2>
+      <p>A concise portfolio site. Welcome — feel free to look around.</p>
+    </section>
+
+    <section id="projects">
+      <h3>Projects</h3>
+      <ul class="projects">
+        <li>
+          <strong>Project A</strong>
+          <p>Short description of project A.</p>
+        </li>
+        <li>
+          <strong>Project B</strong>
+          <p>Short description of project B.</p>
+        </li>
+      </ul>
+    </section>
+
+    <section id="about">
+      <h3>About</h3>
+      <p>Short bio and background.</p>
+    </section>
+
+    <section id="contact">
+      <h3>Contact</h3>
+      <p>Email: <a href="mailto:you@example.com">you@example.com</a></p>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">© <span id="year"></span> Richo</div>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
