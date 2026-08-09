@@ -1,0 +1,23 @@
+[
+  {
+    "id": "source:personal-blog",
+    "provider": "rss",
+    "handle_or_url": "https://yourblog.example.com/feed/",
+    "title": "Personal Blog",
+    "enabled": true
+  },
+  {
+    "id": "source:github",
+    "provider": "github",
+    "handle_or_url": "https://github.com/alexmichaelrichards1995-create",
+    "title": "GitHub activity",
+    "enabled": true
+  },
+  {
+    "id": "source:youtube",
+    "provider": "youtube",
+    "handle_or_url": "https://www.youtube.com/channel/UC_xxx",
+    "title": "YouTube channel",
+    "enabled": false
+  }
+]

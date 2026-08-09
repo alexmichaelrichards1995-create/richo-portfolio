@@ -1,0 +1,22 @@
+name: Social Hub - scheduled ingest
+
+on:
+  schedule:
+    # every 15 minutes
+    - cron: '*/15 * * * *'
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js 18
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install deps
+        run: npm ci || npm install rss-parser node-fetch pg open-graph-scraper
+      - name: Run ingest
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: node social-hub/functions/ingest.js
