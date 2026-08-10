@@ -11,8 +11,9 @@ export default function HomePage() {
         <p className="eyebrow">R.I.C.H.O. SYSTEMS</p>
         <h1>Next.js + Supabase application foundation</h1>
         <p className="lede">
-          The migration branch now includes Supabase SSR, shadcn/Tailwind UI foundations and a complete
-          password-authentication flow while remaining isolated from the current production/static site.
+          The migration branch now includes Supabase SSR, typed commercial data, shadcn/Tailwind UI,
+          authentication, a customer control panel and a secured digital product catalog while remaining
+          isolated from the current production/static site.
         </p>
 
         <div className="statusGrid">
@@ -22,7 +23,7 @@ export default function HomePage() {
           </article>
           <article className="statusCard">
             <span>Database / Auth</span>
-            <strong>Supabase SSR</strong>
+            <strong>Supabase SSR + RLS</strong>
           </article>
           <article className="statusCard">
             <span>Environment</span>
@@ -31,14 +32,17 @@ export default function HomePage() {
         </div>
 
         <div className="mt-7 flex flex-wrap gap-3">
-          <Link href="/auth/login" className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
+          <Link href="/store" className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90">
+            Browse digital products
+          </Link>
+          <Link href="/auth/login" className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium hover:bg-accent">
             Sign in
           </Link>
           <Link href="/auth/sign-up" className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium hover:bg-accent">
             Create account
           </Link>
           <Link href="/protected" className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-5 text-sm font-medium hover:bg-accent">
-            Protected workspace
+            Customer dashboard
           </Link>
         </div>
 
