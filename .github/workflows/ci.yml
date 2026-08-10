@@ -72,5 +72,6 @@ jobs:
           NODE_ENV: test
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
           GITHUB_WEBHOOK_SECRET: test-github-webhook-secret
-          STRIPE_API_KEY: sk_test_placeholder
+          # Deliberately omit STRIPE_API_KEY. Unit/integration CI must never call Stripe.
+          # Live Stripe validation belongs in a separately owner-approved test-mode workflow.
         run: npm test
