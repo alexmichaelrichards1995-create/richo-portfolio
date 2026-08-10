@@ -4,10 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>R.I.C.H.O. Product Runtime Hub | Richo Systems</title>
-  <meta name="description" content="Functional readiness tools and controlled digital product demonstrations for R.I.C.H.O. by Richo Systems." />
+  <meta name="description" content="Functional readiness tools and a 53-product controlled runtime catalogue for R.I.C.H.O. by Richo Systems." />
   <meta name="robots" content="index,follow" />
   <meta property="og:title" content="R.I.C.H.O. Product Runtime Hub" />
-  <meta property="og:description" content="Run structured AI governance, paid-pilot and buyer-readiness checks with explicit human approval gates." />
+  <meta property="og:description" content="Run structured product readiness checks with explicit evidence and human approval gates." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="assets/logo.svg" />
   <meta name="twitter:card" content="summary_large_image" />
@@ -22,7 +22,8 @@
         <span><strong>R.I.C.H.O.</strong><span>Research Intelligence & Continuous Heuristic Optimisation</span></span>
       </a>
       <nav aria-label="Primary navigation">
-        <a href="#products">Products</a>
+        <a href="#products">Featured</a>
+        <a href="#catalog">53 Products</a>
         <a href="#tools">Run tools</a>
         <a href="#controls">Controls</a>
         <a href="https://richosystems.technology/tools">Live AI platform</a>
@@ -36,42 +37,43 @@
         <div>
           <div class="eyebrow">Functional digital product layer</div>
           <h1>R.I.C.H.O. products that do work.</h1>
-          <p class="lede">This runtime hub converts three commercial R.I.C.H.O. product systems into usable, browser-based readiness tools. Each tool produces a deterministic assessment from the information you select, exposes evidence gaps and keeps consequential approval with a human.</p>
+          <p class="lede">This runtime hub converts the R.I.C.H.O. commercial catalogue into usable browser-based product gates. It includes three specialised readiness tools plus a common runtime for all 53 RSP products. Each assessment exposes evidence gaps and keeps consequential approval with a human.</p>
           <div class="actions">
-            <a class="button" href="#tools">Run the tools</a>
+            <a class="button" href="#catalog">Explore all 53 products</a>
             <a class="button secondary" href="https://richosystems.technology/">Open Richo Systems</a>
           </div>
         </div>
         <aside class="panel hero-panel" aria-label="Runtime summary">
-          <div class="metric"><span>Interactive product tools</span><strong>3</strong></div>
+          <div class="metric"><span>Catalogue products</span><strong>53</strong></div>
+          <div class="metric"><span>Specialised product engines</span><strong>3</strong></div>
+          <div class="metric"><span>Family readiness engines</span><strong>6</strong></div>
           <div class="metric"><span>External actions</span><strong>Blocked</strong></div>
           <div class="metric"><span>Human approval</span><strong>Required</strong></div>
-          <div class="metric"><span>Runtime dependency</span><strong>Browser only</strong></div>
           <div class="metric"><span>Secrets required</span><strong>None</strong></div>
         </aside>
       </section>
 
       <section id="products">
-        <div class="eyebrow">Commercial product set</div>
-        <h2>Three controlled products + one bundle</h2>
+        <div class="eyebrow">Featured commercial product set</div>
+        <h2>Three flagship products + one bundle</h2>
         <p class="lede">These products are positioned as structured implementation aids. Pricing is indicative and activation remains subject to owner approval, final scope, tax treatment, licence terms and appropriate professional review.</p>
         <div class="grid">
           <article class="product-card">
-            <span class="badge">Product 01</span>
+            <span class="badge">RSP-001</span>
             <h3>AI Governance Starter Kit</h3>
             <p>Human authority, risk tiering, evidence controls, incident escalation and vendor due diligence for organisations introducing AI-assisted workflows.</p>
             <div class="price">A$2,950 + GST*</div>
             <a href="#governance-tool">Run readiness check →</a>
           </article>
           <article class="product-card">
-            <span class="badge">Product 02</span>
+            <span class="badge">RSP-002</span>
             <h3>Paid Pilot Readiness Kit</h3>
             <p>Turns an unstructured proof-of-concept into a bounded pilot with sponsor ownership, measurable success criteria, scope control and close-out evidence.</p>
             <div class="price">A$4,950 + GST*</div>
             <a href="#pilot-tool">Run pilot gate →</a>
           </article>
           <article class="product-card">
-            <span class="badge">Product 03</span>
+            <span class="badge">RSP-003</span>
             <h3>Buyer-Ready IP & Due-Diligence Kit</h3>
             <p>Structures IP assets, chain-of-title evidence, contributor rights, third-party dependencies, disclosure controls and diligence gaps.</p>
             <div class="price">A$7,500 + GST*</div>
@@ -81,19 +83,41 @@
         <div class="panel" style="margin-top:1rem">
           <span class="badge">Bundle</span>
           <h3>Commercial Readiness Trilogy</h3>
-          <p class="lede">Products 01–03 plus an owner-approved orientation session and consolidated implementation roadmap.</p>
+          <p class="lede">RSP-001–003 plus an owner-approved orientation session and consolidated implementation roadmap.</p>
           <div class="price">A$12,500 + GST*</div>
         </div>
         <p class="fine-print">*Indicative catalogue pricing only. This page does not create a contract, accept payment, grant a licence or automatically approve delivery.</p>
       </section>
 
+      <section id="catalog">
+        <div class="eyebrow">Master product runtime</div>
+        <h2>RSP-001 through RSP-053</h2>
+        <p class="lede">Search the complete portfolio, select a product, and run the readiness gate for its operating family. This gives every catalogue product an executable pre-activation control layer while its full licensed pack remains separately governed.</p>
+        <div class="catalog-controls">
+          <input id="catalog-search" class="text-input" type="search" placeholder="Search RSP number, product or family…" aria-label="Search product catalogue" />
+          <span id="catalog-count" class="badge">53 / 53 products</span>
+        </div>
+        <div id="catalog-grid" class="catalog-grid" aria-live="polite"></div>
+
+        <div id="catalog-assessment" class="panel catalog-assessment">
+          <div class="eyebrow">Selected product readiness gate</div>
+          <label for="catalog-product">Product</label>
+          <select id="catalog-product" class="text-input"></select>
+          <h3 id="catalog-assessment-title">RSP product</h3>
+          <p id="catalog-assessment-family" class="badge">Product family</p>
+          <div id="catalog-checklist" class="checklist"></div>
+          <button id="catalog-score" class="button" type="button">Run product readiness gate</button>
+          <div id="catalog-output" class="output" aria-live="polite">Select a product and run its readiness gate.</div>
+        </div>
+      </section>
+
       <section id="tools">
-        <div class="eyebrow">Runnable software</div>
-        <h2>Product readiness engines</h2>
+        <div class="eyebrow">Specialised runnable software</div>
+        <h2>Flagship product readiness engines</h2>
         <p class="lede">Select only controls for which you have evidence. The scoring engine calculates readiness locally in your browser; no submitted assessment data is transmitted by this static tool.</p>
         <div class="tool-grid">
           <article class="tool-card" id="governance-tool">
-            <span class="badge">Governance</span>
+            <span class="badge">RSP-001</span>
             <h3>AI Governance Readiness Check</h3>
             <div class="checklist">
               <label><input id="governance-useCase" type="checkbox" />AI use case is documented</label>
@@ -111,7 +135,7 @@
           </article>
 
           <article class="tool-card" id="pilot-tool">
-            <span class="badge">Pilot</span>
+            <span class="badge">RSP-002</span>
             <h3>Paid Pilot Readiness Gate</h3>
             <div class="checklist">
               <label><input id="pilot-problem" type="checkbox" />The business problem is specific and bounded</label>
@@ -129,7 +153,7 @@
           </article>
 
           <article class="tool-card" id="diligence-tool">
-            <span class="badge">Diligence</span>
+            <span class="badge">RSP-003</span>
             <h3>IP & Due-Diligence Evidence Gate</h3>
             <div class="checklist">
               <label><input id="diligence-assets" type="checkbox" />Material IP/assets are inventoried</label>
@@ -152,9 +176,9 @@
         <div class="eyebrow">Operating controls</div>
         <h2>What “running” means here</h2>
         <div class="stats">
-          <div class="stat"><strong>Client-side</strong><span>No backend dependency for these three checks.</span></div>
+          <div class="stat"><strong>53 products</strong><span>Every RSP product is addressable through the common runtime.</span></div>
+          <div class="stat"><strong>Client-side</strong><span>No backend dependency for catalogue readiness checks.</span></div>
           <div class="stat"><strong>Deterministic</strong><span>Same selections produce the same readiness score.</span></div>
-          <div class="stat"><strong>Evidence-first</strong><span>Users are told to select only controls they can support.</span></div>
           <div class="stat"><strong>Human-gated</strong><span>No assessment authorises a consequential action.</span></div>
         </div>
         <div class="notice" style="margin-top:1rem">
@@ -167,6 +191,7 @@
   <footer class="site-footer">
     <div class="container">© <span id="year"></span> Richo Systems · R.I.C.H.O. product runtime layer · <a href="https://richosystems.technology/">richosystems.technology</a></div>
   </footer>
+  <script src="catalog.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>
