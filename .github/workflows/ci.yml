@@ -46,7 +46,7 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
         run: |
-          psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
+          ./scripts/run_migrations.sh "$DATABASE_URL"
 
       - name: Set secrets for tests
         env:
