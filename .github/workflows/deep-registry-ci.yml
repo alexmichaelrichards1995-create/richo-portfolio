@@ -8,6 +8,7 @@ on:
       - 'tests/deep-registry.mjs'
       - 'tests/case-engine.mjs'
       - 'tests/external-agents.mjs'
+      - 'tests/multi-ai-load-law.mjs'
       - '.github/workflows/deep-registry-ci.yml'
   workflow_dispatch:
 
@@ -30,3 +31,5 @@ jobs:
         run: node tests/case-engine.mjs
       - name: Validate governed external agent registry
         run: node tests/external-agents.mjs
+      - name: Validate Multi-AI Load Constitution
+        run: node tests/multi-ai-load-law.mjs
