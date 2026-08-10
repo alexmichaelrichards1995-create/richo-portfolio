@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS github_users (
   github_id BIGINT PRIMARY KEY,
   login TEXT NOT NULL,
   avatar_url TEXT,
-  access_token TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
