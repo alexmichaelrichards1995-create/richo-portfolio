@@ -1,0 +1,37 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: richo_github_app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d richo_github_app"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    volumes:
+      - richo_github_db:/var/lib/postgresql/data
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/richo_github_app
+      DATABASE_SSL: "false"
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      GITHUB_WEBHOOK_SECRET: ${GITHUB_WEBHOOK_SECRET:-}
+      GITHUB_PRIVATE_KEY_B64: ${GITHUB_PRIVATE_KEY_B64:-}
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:-}
+
+volumes:
+  richo_github_db:

@@ -1,0 +1,72 @@
+name: GitHub App CI
+
+on:
+  push:
+    branches:
+      - agent/github-marketplace-mvp
+    paths:
+      - 'github-app/**'
+      - '.github/workflows/github-app-ci.yml'
+  pull_request:
+    paths:
+      - 'github-app/**'
+      - '.github/workflows/github-app-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: richo_github_app
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d richo_github_app"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: github-app
+
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/richo_github_app
+      DATABASE_SSL: 'false'
+      GITHUB_WEBHOOK_SECRET: integration-webhook-secret
+      SESSION_SECRET: integration-session-secret-32-characters-minimum
+      GITHUB_APP_ID: '123456'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Syntax check
+        run: node --check src/server.js
+
+      - name: Apply database migrations
+        run: node scripts/migrate.js
+
+      - name: Run unit and integration tests
+        run: npm test
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build container
+        run: docker build -t richo-github-app:test .
