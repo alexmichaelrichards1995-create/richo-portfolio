@@ -2,7 +2,7 @@ name: Full R.I.C.H.O. Deep Runtime Validation
 
 on:
   push:
-    branches: [ agent/deep-rsp-004-013 ]
+    branches: [ agent/deep-rsp-004-053 ]
     paths:
       - 'runtime/**'
       - 'tests/deep-registry.mjs'
