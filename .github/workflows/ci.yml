@@ -66,3 +66,4 @@ jobs:
           node tests/marketplace_webhook_handler.test.js
           node tests/marketplace_webhook_handler.idempotency.test.js
           node tests/webhook_signature.integration.test.js
+          node tests/stripe_retry.test.js
