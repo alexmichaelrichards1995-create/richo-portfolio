@@ -76,7 +76,7 @@ jobs:
 
       - name: Run TruffleHog
         continue-on-error: true
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.96.0
         with:
           path: ./
           extra_args: --only-verified
@@ -97,7 +97,7 @@ jobs:
       - name: Run ShiftLeft scan
         if: ${{ secrets.SHIFTLEFT_ACCESS_TOKEN != '' }}
         continue-on-error: true
-        uses: ShiftLeftSecurity/scan-action@master
+        uses: ShiftLeftSecurity/scan-action@v1.3.0
         with:
           output: reports
         env:

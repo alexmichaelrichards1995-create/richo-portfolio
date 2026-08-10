@@ -31,7 +31,6 @@ jobs:
 
       - name: Generate changelog
         id: changelog
-        continue-on-error: true
         run: |
           {
             echo '## Changes'

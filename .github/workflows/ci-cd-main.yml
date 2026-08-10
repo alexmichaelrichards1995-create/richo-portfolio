@@ -93,7 +93,7 @@ jobs:
 
       - name: Run OWASP dependency-check when manifests exist
         continue-on-error: true
-        uses: dependency-check/Dependency-Check_Action@main
+        uses: dependency-check/Dependency-Check_Action@1.1.0
         with:
           project: richo-portfolio
           path: .
@@ -128,7 +128,11 @@ jobs:
       - name: Build static archive
         run: |
           mkdir -p dist/site
-          cp -R index.html styles.css catalog.js app.js assets robots.txt sitemap.xml netlify.toml vercel.json Dockerfile README.md dist/site/
+          for path in index.html styles.css catalog.js app.js assets robots.txt sitemap.xml netlify.toml vercel.json Dockerfile README.md; do
+            if [ -e "$path" ]; then
+              cp -R "$path" dist/site/
+            fi
+          done
           tar -czf dist/richo-portfolio-site.tar.gz -C dist/site .
           zip -rq dist/richo-portfolio-site.zip dist/site
 
