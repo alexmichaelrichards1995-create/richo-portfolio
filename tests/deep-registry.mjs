@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { DEEP_RUNTIME_SPECS, DEEP_RUNTIME_IDS, getDeepRuntimeStats } from '../runtime/deep-registry.mjs';
 import { evaluateProduct } from '../runtime/product-evaluator.mjs';
 
-const expectedIds = Array.from({length: 50}, (_, index) => `RSP-${String(index + 4).padStart(3, '0')}`);
-assert.deepEqual(DEEP_RUNTIME_IDS, expectedIds, 'Deep registry must cover RSP-004 through RSP-053 without gaps');
-assert.equal(new Set(DEEP_RUNTIME_IDS).size, 50, 'Product IDs must be unique');
+const expectedIds = Array.from({length: 53}, (_, index) => `RSP-${String(index + 1).padStart(3, '0')}`);
+assert.deepEqual(DEEP_RUNTIME_IDS, expectedIds, 'Deep registry must cover RSP-001 through RSP-053 without gaps');
+assert.equal(new Set(DEEP_RUNTIME_IDS).size, 53, 'Product IDs must be unique');
 
 for (const id of expectedIds) {
   const spec = DEEP_RUNTIME_SPECS[id];
@@ -42,11 +42,12 @@ for (const id of expectedIds) {
 }
 
 const stats = getDeepRuntimeStats();
-assert.equal(stats.products, 50);
-assert.ok(stats.artefacts >= 500, 'Portfolio should model at least 500 product artefacts');
-assert.ok(stats.hardGates >= 250, 'Portfolio should model at least 250 mandatory gates');
-assert.ok(stats.metrics >= 300, 'Portfolio should model at least 300 operating metrics');
-assert.ok(stats.lifecycleStages >= 300, 'Portfolio should model at least 300 lifecycle stages');
-assert.equal(stats.families.length, 5);
+assert.equal(stats.products, 53);
+assert.ok(stats.artefacts >= 530, 'Portfolio should model at least 530 product artefacts');
+assert.ok(stats.hardGates >= 265, 'Portfolio should model at least 265 mandatory gates');
+assert.ok(stats.metrics >= 318, 'Portfolio should model at least 318 operating metrics');
+assert.ok(stats.lifecycleStages >= 318, 'Portfolio should model at least 318 lifecycle stages');
+assert.equal(stats.families.length, 6);
+assert.ok(stats.families.includes('Foundation'));
 
 console.log('Deep registry validation PASSED', stats);
