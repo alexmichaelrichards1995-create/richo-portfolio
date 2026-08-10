@@ -1,0 +1,26 @@
+name: Deep R.I.C.H.O. Runtime Validation
+
+on:
+  push:
+    branches: [ agent/deep-rsp-004-013 ]
+    paths:
+      - 'runtime/**'
+      - 'tests/deep-runtime.mjs'
+      - '.github/workflows/deep-runtime-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate deep product schemas and gates
+        run: node tests/deep-runtime.mjs
