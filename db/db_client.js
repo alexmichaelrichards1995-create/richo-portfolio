@@ -54,8 +54,13 @@ async function upsertSubscription(accountId, record) {
     const values = [accountId, record.account_login || null, record.plan_id, record.plan_name || null, record.monthly_price_in_cents || null, record.status || 'active', record.billing_cycle_start || null];
     const client = await pgPool.connect();
     try {
+      await client.query('BEGIN');
       const res = await client.query(sql, values);
+      await client.query('COMMIT');
       return res.rows[0];
+    } catch (e) {
+      await client.query('ROLLBACK').catch(()=>{});
+      throw e;
     } finally {
       client.release();
     }
