@@ -6,6 +6,7 @@ on:
     paths:
       - 'runtime/**'
       - 'tests/deep-registry.mjs'
+      - 'tests/case-engine.mjs'
       - '.github/workflows/deep-registry-ci.yml'
   workflow_dispatch:
 
@@ -24,3 +25,5 @@ jobs:
           node-version: '22'
       - name: Validate complete deep runtime registry
         run: node tests/deep-registry.mjs
+      - name: Validate evidence-backed case engine
+        run: node tests/case-engine.mjs
