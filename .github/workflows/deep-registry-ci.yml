@@ -1,0 +1,26 @@
+name: Full R.I.C.H.O. Deep Runtime Validation
+
+on:
+  push:
+    branches: [ agent/deep-rsp-004-013 ]
+    paths:
+      - 'runtime/**'
+      - 'tests/deep-registry.mjs'
+      - '.github/workflows/deep-registry-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate complete deep runtime registry
+        run: node tests/deep-registry.mjs
