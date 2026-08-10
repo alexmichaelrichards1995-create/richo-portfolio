@@ -116,9 +116,50 @@ async function processMarketplaceEvent(event, deliveryId) {
 router.post('/marketplace', express.json({ verify: verifySignature }), requireValidSignature, async (req, res) => {
   try {
     const deliveryId = req.get('x-github-delivery');
-    // Fire-and-forget processing to respond quickly
-    processMarketplaceEvent(req.body, deliveryId).catch(err => console.error('async processing error', err));
-    res.status(200).send('ok');
+      // Transactional processing: check delivery table + upsert subscription within a DB transaction when Postgres enabled
+      if (deliveryId && require('./db/db_client').pgPool) {
+        // run transactional flow synchronously to avoid duplicates
+        try {
+          const db = require('./db/db_client');
+          const client = await db.pgPool.connect();
+          try {
+            await client.query('BEGIN');
+            const exists = await client.query('SELECT processed FROM deliveries WHERE delivery_id = $1 FOR UPDATE', [deliveryId]);
+            if (exists.rows.length && exists.rows[0].processed) {
+              await client.query('ROLLBACK');
+              res.status(200).send('ok');
+              return;
+            }
+
+            // insert or update delivery as processed
+            await client.query("INSERT INTO deliveries(delivery_id, processed, processed_at) VALUES ($1, true, now()) ON CONFLICT (delivery_id) DO UPDATE SET processed = true, processed_at = now()", [deliveryId]);
+
+            // process event
+            await processMarketplaceEvent(req.body, deliveryId);
+
+            await client.query('COMMIT');
+            res.status(200).send('ok');
+            return;
+          } catch (e) {
+            await client.query('ROLLBACK').catch(()=>{});
+            console.error('transactional processing error', e && e.message);
+            res.status(500).send('server error');
+            return;
+          } finally {
+            client.release();
+          }
+        } catch (e) {
+          console.error('db transactional flow failed', e && e.message);
+          // fallback to async processing
+          processMarketplaceEvent(req.body, deliveryId).catch(err => console.error('async processing error', err));
+          res.status(200).send('ok');
+          return;
+        }
+      }
+
+      // Fire-and-forget processing to respond quickly (fallback)
+      processMarketplaceEvent(req.body, deliveryId).catch(err => console.error('async processing error', err));
+      res.status(200).send('ok');
   } catch (err) {
     console.error('marketplace webhook error', err);
     res.status(500).send('server error');
