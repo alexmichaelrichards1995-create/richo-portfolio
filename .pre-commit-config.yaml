@@ -1,0 +1,13 @@
+repos:
+  - repo: local
+    hooks:
+      - id: richo-smoke
+        name: richo smoke validation
+        entry: node tests/smoke.mjs
+        language: system
+        pass_filenames: false
+      - id: richo-automation
+        name: richo automation validation
+        entry: node tests/automation.mjs
+        language: system
+        pass_filenames: false

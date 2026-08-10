@@ -1,0 +1,49 @@
+name: Release Management
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Generate changelog and publish release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build release archives
+        run: |
+          mkdir -p release-artifacts
+          git archive --format=tar.gz -o release-artifacts/richo-portfolio.tar.gz HEAD
+          git archive --format=zip -o release-artifacts/richo-portfolio.zip HEAD
+
+      - name: Generate changelog
+        id: changelog
+        continue-on-error: true
+        run: |
+          {
+            echo '## Changes'
+            git log --pretty='- %s (%h)' "$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || git rev-list --max-parents=0 HEAD)"..HEAD
+          } > release-artifacts/CHANGELOG.md
+          echo "path=release-artifacts/CHANGELOG.md" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: ${{ steps.changelog.outputs.path }}
+          files: |
+            release-artifacts/CHANGELOG.md
+            release-artifacts/richo-portfolio.tar.gz
+            release-artifacts/richo-portfolio.zip

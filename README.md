@@ -33,9 +33,12 @@ The runtime is an implementation/readiness aid. A readiness score does not provi
 
 ```bash
 node tests/smoke.mjs
+node tests/automation.mjs
 ```
 
 The smoke gate checks required runtime files, removes known scaffold placeholders, verifies the complete unique RSP-001–RSP-053 catalogue and confirms the core runtime functions are present.
+
+The automation gate verifies the CI/CD workflows, shared GitHub Actions templates, documentation, showcase data files and monitoring configuration added for repository operations.
 
 ## Local preview
 
@@ -54,7 +57,7 @@ You can also serve the repository root with any static HTTP server.
 
 Configuration is retained for GitHub Pages, Vercel, Netlify and Docker/Nginx.
 
-The GitHub Actions workflow runs the smoke gate, packages the static site and attempts a Pages deployment from `main`. GitHub Pages must be enabled in repository settings before the final Pages deployment step can succeed.
+The GitHub Actions workflows run smoke and automation gates, package the static site, perform layered security checks and attempt a Pages deployment from `main`. GitHub Pages must be enabled in repository settings before the final Pages deployment step can succeed.
 
 ## Production domain
 
@@ -69,7 +72,11 @@ The runtime also links to the Richo Systems tools surface at `/tools`.
 - `app.js` — scoring, search, selection and readiness engines
 - `styles.css` — responsive runtime interface
 - `tests/smoke.mjs` — pre-deployment verification
-- `.github/workflows/deploy-pages.yml` — CI/deployment workflow
+- `.github/workflows/ci-cd-main.yml` — main CI/CD workflow
+- `.github/workflows/scheduled-maintenance.yml` — scheduled maintenance workflow
+- `.github/workflows/security-audit.yml` — security audit workflow
+- `.github/workflows/release.yml` — release workflow
+- `tests/automation.mjs` — automation/documentation verification
 - `Dockerfile`, `vercel.json`, `netlify.toml` — alternate deployment targets
 
 ## Completion standard

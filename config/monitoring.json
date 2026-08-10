@@ -1,0 +1,16 @@
+{
+  "healthChecks": {
+    "staging": "STAGING_HEALTHCHECK_URL",
+    "production": "PRODUCTION_HEALTHCHECK_URL"
+  },
+  "alerts": {
+    "slackWebhookSecret": "SLACK_WEBHOOK_URL",
+    "severityThreshold": "high"
+  },
+  "artifacts": [
+    "runtime-site",
+    "security-reports",
+    "backup-artifacts",
+    "sast-reports"
+  ]
+}

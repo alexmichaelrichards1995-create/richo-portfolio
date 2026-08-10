@@ -1,0 +1,15 @@
+{
+  "provider": "pluggable-client-analytics",
+  "events": [
+    "catalog_search",
+    "catalog_select",
+    "readiness_score",
+    "copy_result"
+  ],
+  "dimensions": [
+    "product_id",
+    "product_family",
+    "readiness_state"
+  ],
+  "consentRequired": true
+}

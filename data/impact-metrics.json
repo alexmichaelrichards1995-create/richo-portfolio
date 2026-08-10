@@ -1,0 +1,17 @@
+{
+  "totals": {
+    "products": 53,
+    "families": 6,
+    "flagshipEngines": 3
+  },
+  "automation": {
+    "workflows": 4,
+    "securityLayers": 5,
+    "deploymentTargets": 4
+  },
+  "observability": {
+    "healthChecks": 2,
+    "artifactSets": 4,
+    "notifications": 1
+  }
+}

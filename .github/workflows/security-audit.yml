@@ -1,0 +1,114 @@
+name: Security Audit
+
+on:
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '30 4 * * 2'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: security-audit-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-audit:
+    name: NPM dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Run npm audit
+        continue-on-error: true
+        run: |
+          if [ -f package.json ]; then
+            npm audit --audit-level=moderate
+          else
+            echo "No package.json found; skipping npm audit."
+          fi
+
+  container-scan:
+    name: Trivy container and filesystem scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build local image for scanning
+        continue-on-error: true
+        run: docker build -t richo-portfolio:security-scan .
+
+      - name: Run Trivy scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: richo-portfolio:security-scan
+          format: table
+          exit-code: '0'
+
+      - name: Run Trivy filesystem scan
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: table
+          exit-code: '0'
+
+  secret-detection:
+    name: TruffleHog secret detection
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog
+        continue-on-error: true
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          extra_args: --only-verified
+
+  sast:
+    name: ShiftLeft and Semgrep SAST
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep baseline
+        continue-on-error: true
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/javascript
+
+      - name: Run ShiftLeft scan
+        if: ${{ secrets.SHIFTLEFT_ACCESS_TOKEN != '' }}
+        continue-on-error: true
+        uses: ShiftLeftSecurity/scan-action@master
+        with:
+          output: reports
+        env:
+          WORKSPACE: ${{ github.workspace }}
+          SHIFTLEFT_ACCESS_TOKEN: ${{ secrets.SHIFTLEFT_ACCESS_TOKEN }}
+
+      - name: Upload SAST artifacts
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: sast-reports
+          path: reports
+          if-no-files-found: ignore

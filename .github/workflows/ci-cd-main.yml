@@ -1,0 +1,265 @@
+name: Main CI/CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+  packages: write
+  security-events: write
+
+concurrency:
+  group: ci-cd-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/richo-portfolio
+
+jobs:
+  validate:
+    name: Validate runtime and formatting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Shared validation setup
+        uses: ./.github/actions/runtime-validation
+        with:
+          node-version: 20
+
+      - name: Validate JavaScript syntax
+        run: |
+          node --check app.js
+          node --check catalog.js
+
+      - name: Check whitespace and merge markers
+        run: |
+          git grep -n '<<<<<<<\|=======\|>>>>>>>' -- . ':!package-lock.json' && exit 1 || true
+          git ls-files -z | xargs -0 grep -nH $'\r' && exit 1 || true
+          git diff --check --cached || true
+
+  smoke-tests:
+    name: Smoke tests (Node ${{ matrix.node-version }})
+    needs: validate
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [16, 18, 20]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Shared validation setup
+        uses: ./.github/actions/runtime-validation
+        with:
+          node-version: ${{ matrix.node-version }}
+
+  security-scans:
+    name: Security scans
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Shared validation setup
+        uses: ./.github/actions/runtime-validation
+        with:
+          node-version: 20
+          run-automation-test: 'false'
+
+      - name: Run npm audit when package metadata exists
+        continue-on-error: true
+        run: |
+          if [ -f package.json ]; then
+            npm audit --audit-level=high
+          else
+            echo "No package.json found; skipping npm audit."
+          fi
+
+      - name: Run Semgrep SAST
+        continue-on-error: true
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: p/javascript
+
+      - name: Run OWASP dependency-check when manifests exist
+        continue-on-error: true
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: richo-portfolio
+          path: .
+          format: HTML
+          out: reports
+
+      - name: Upload security reports
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: reports
+          if-no-files-found: ignore
+
+  build:
+    name: Build and package
+    needs: [smoke-tests, security-scans]
+    runs-on: ubuntu-latest
+    outputs:
+      image-tags: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Shared validation setup
+        uses: ./.github/actions/runtime-validation
+        with:
+          node-version: 20
+          run-automation-test: 'false'
+
+      - name: Build static archive
+        run: |
+          mkdir -p dist/site
+          cp -R index.html styles.css catalog.js app.js assets robots.txt sitemap.xml netlify.toml vercel.json Dockerfile README.md dist/site/
+          tar -czf dist/richo-portfolio-site.tar.gz -C dist/site .
+          zip -rq dist/richo-portfolio-site.zip dist/site
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-site
+          path: dist
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY_IMAGE }}
+          tags: |
+            type=sha
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and optionally push container image
+        continue-on-error: true
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  deploy-staging:
+    name: Deploy staging
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+    concurrency:
+      group: richo-staging
+      cancel-in-progress: false
+    steps:
+      - name: Trigger staging deployment hook
+        continue-on-error: true
+        env:
+          DEPLOY_HOOK: ${{ secrets.STAGING_DEPLOY_HOOK }}
+        run: |
+          if [ -n "$DEPLOY_HOOK" ]; then
+            curl --fail --silent --show-error -X POST "$DEPLOY_HOOK"
+          else
+            echo "STAGING_DEPLOY_HOOK not configured; skipping external staging deploy."
+          fi
+
+      - name: Staging health check
+        continue-on-error: true
+        env:
+          HEALTHCHECK_URL: ${{ secrets.STAGING_HEALTHCHECK_URL }}
+        run: |
+          if [ -n "$HEALTHCHECK_URL" ]; then
+            curl --fail --silent --show-error --retry 5 --retry-delay 5 "$HEALTHCHECK_URL"
+          else
+            echo "STAGING_HEALTHCHECK_URL not configured; skipping health check."
+          fi
+
+  deploy-production:
+    name: Deploy production
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: richo-production
+      cancel-in-progress: false
+    steps:
+      - name: Download site artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: runtime-site
+          path: dist
+
+      - name: Prepare site for Pages
+        run: |
+          mkdir -p site
+          cp -R dist/site/. site/
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Production health check
+        continue-on-error: true
+        env:
+          HEALTHCHECK_URL: ${{ secrets.PRODUCTION_HEALTHCHECK_URL }}
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          TARGET="${HEALTHCHECK_URL:-$PAGE_URL}"
+          if [ -n "$TARGET" ]; then
+            curl --fail --silent --show-error --retry 5 --retry-delay 5 "$TARGET"
+          else
+            echo "No production health check URL available."
+          fi
+
+  notify:
+    name: Notify Slack
+    if: always()
+    needs: [validate, smoke-tests, security-scans, build, deploy-staging, deploy-production]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send pipeline summary to Slack
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: |
+            {
+              "text": "*Richo Portfolio CI/CD* `${{ github.workflow }}` on `${{ github.ref_name }}` finished with `${{ job.status }}`.\n• Validate: `${{ needs.validate.result }}`\n• Matrix tests: `${{ needs.smoke-tests.result }}`\n• Security: `${{ needs.security-scans.result }}`\n• Build: `${{ needs.build.result }}`\n• Staging: `${{ needs.deploy-staging.result }}`\n• Production: `${{ needs.deploy-production.result }}`"
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
