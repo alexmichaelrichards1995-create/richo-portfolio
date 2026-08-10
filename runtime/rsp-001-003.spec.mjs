@@ -95,7 +95,7 @@ export const FOUNDATION_RUNTIME_SPECS = {
       'privileged_secrets_personal_and_restricted_information_are_not_overdisclosed',
       'recipient_purpose_nda_and_disclosure_stage_are_verified',
       'data_room_access_is_named_least_privilege_and_revocable',
-      'transfer_dependencies_and_rotation_or_deletion_plans_are documented'.replace(' are documented','_are_documented'),
+      'transfer_dependencies_and_rotation_or_deletion_plans_are_documented',
       'named_human_management_signoff_records_unresolved_material_issues'
     ],
     acceptance: 'Transaction readiness remains blocked while any ownership, authority, legal-disclosure, data or integrity P0 blocker is unresolved. Material claims must link to evidence, sensitive disclosure must be controlled, and transferability must be evidenced rather than inferred from possession.',
