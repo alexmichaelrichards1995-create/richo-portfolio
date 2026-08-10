@@ -1,0 +1,8 @@
+{
+  "name": "richo-portfolio-app",
+  "version": "0.1.0",
+  "scripts": {
+    "test": "node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js"
+  },
+  "devDependencies": {}
+}
