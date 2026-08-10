@@ -1,10 +1,16 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     services:
       postgres:
         image: postgres:15
@@ -14,52 +20,61 @@ jobs:
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
-    strategy:
-      matrix:
-        node-version: [18.x]
-    steps:
-      - uses: actions/checkout@v4
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
 
-      - name: Use Node.js
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.x, 22.x]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
 
-      - name: Install system deps (psql)
-        run: sudo apt-get update && sudo apt-get install -y postgresql-client
-
       - name: Install dependencies
+        shell: bash
         run: |
-          if [ -f package-lock.json ]; then
+          set -euo pipefail
+          if [[ -f package-lock.json || -f npm-shrinkwrap.json ]]; then
             npm ci
           else
-            npm install
+            echo "::warning::No npm lockfile found; using npm install. Add and commit package-lock.json for reproducible production builds."
+            npm install --no-audit --no-fund
           fi
+
+      - name: Dependency vulnerability gate
+        run: npm audit --audit-level=high
 
       - name: Wait for Postgres
         env:
           PGPASSWORD: postgres
         run: |
-          until pg_isready -h localhost -p 5432 -U postgres -d postgres; do sleep 1; done
+          for i in {1..30}; do
+            pg_isready -h localhost -p 5432 -U postgres -d postgres && exit 0
+            sleep 1
+          done
+          echo "Postgres did not become ready" >&2
+          exit 1
 
       - name: Run migrations
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
+        run: npm run migrate
 
-      - name: Set secrets for tests
+      - name: Run complete test suite
         env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-        run: echo "secrets set"
-
-      - name: Run tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          NODE_ENV: test
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          node tests/marketplace_webhook_handler.test.js
-          node tests/marketplace_webhook_handler.idempotency.test.js
-          node tests/webhook_signature.integration.test.js
+          GITHUB_WEBHOOK_SECRET: test-github-webhook-secret
+          # Deliberately omit STRIPE_API_KEY. Unit/integration CI must never call Stripe.
+          # Live Stripe validation belongs in a separately owner-approved test-mode workflow.
+        run: npm test
