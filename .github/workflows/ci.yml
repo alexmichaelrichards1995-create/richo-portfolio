@@ -51,6 +51,9 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
+      - name: Dependency vulnerability gate
+        run: npm audit --audit-level=high
+
       - name: Wait for Postgres
         env:
           PGPASSWORD: postgres
