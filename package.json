@@ -2,7 +2,8 @@
   "name": "richo-portfolio-app",
   "version": "0.1.0",
   "scripts": {
-    "test": "node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js"
+    "migrate": "bash scripts/run_migrations.sh",
+    "test": "node tests/db_migrations.test.js && node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js && node tests/stripe_integration.test.js && node tests/stripe_connect.integration.test.js"
   },
   "dependencies": {
     "pg": "^8.11.0",
