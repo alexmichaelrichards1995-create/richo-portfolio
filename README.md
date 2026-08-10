@@ -1,45 +1,77 @@
-# richo-portfolio
-Personal portfolio and projects for Richo.
+# R.I.C.H.O. Product Runtime Hub
 
-This repository contains a minimal static portfolio scaffold and deployment configurations for multiple platforms.
+A controlled browser-based runtime layer for the R.I.C.H.O. (Research Intelligence & Continuous Heuristic Optimisation) digital product catalogue.
 
-Deployment targets provided:
+## Current runtime
 
-- GitHub Pages (GitHub Actions workflow in `.github/workflows/deploy-pages.yml`)
-- Vercel (configuration in `vercel.json`)
-- Netlify (configuration in `netlify.toml`)
-- Docker (static site served by Nginx; see `Dockerfile`)
+- 53 addressable products: `RSP-001` through `RSP-053`
+- 6 product-family readiness engines
+- 3 specialised interactive engines for:
+  - RSP-001 — AI Governance Starter Kit
+  - RSP-002 — Paid Pilot Readiness Kit
+  - RSP-003 — Buyer-Ready IP and Due-Diligence Kit
+- deterministic client-side scoring
+- evidence-gap reporting
+- explicit human approval gates
+- no secrets or backend dependency for readiness assessments
+- automated smoke tests before deployment packaging
 
-Quick start (preview locally):
+## Product families
 
-Docker (recommended for a local preview):
+1. Foundation
+2. Governance, Risk & Assurance
+3. Commercial & Revenue
+4. Product & Delivery
+5. Procurement, Market Access & Transactions
+6. Leadership, Workforce & Operating System
+
+## Safety and authority boundary
+
+The runtime is an implementation/readiness aid. A readiness score does not provide professional advice, certification, legal compliance, financial approval, security assurance, contractual acceptance or authority to perform consequential external actions. Human approval remains required where applicable.
+
+## Local verification
 
 ```bash
-# build image
-docker build -t richo-portfolio .
-
-# run container (open http://localhost:8080)
-docker run --rm -p 8080:80 richo-portfolio
+node tests/smoke.mjs
 ```
 
-GitHub Pages:
+The smoke gate checks required runtime files, removes known scaffold placeholders, verifies the complete unique RSP-001–RSP-053 catalogue and confirms the core runtime functions are present.
 
-Push to `main` and the GitHub Actions workflow will publish the repository to GitHub Pages.
+## Local preview
 
-Vercel / Netlify:
+### Docker
 
-Connect the repository to your Vercel or Netlify account and the platform will deploy the static site automatically.
+```bash
+docker build -t richo-runtime .
+docker run --rm -p 8080:80 richo-runtime
+```
 
-Recommended next steps to make this site production-ready:
+Open `http://localhost:8080`.
 
-- Customize site content: Replace placeholders in `index.html` (company name, copy, projects) and add your logo at `assets/logo.svg`.
-- Analytics: Replace the GA4 placeholder `G-XXXXXXX` in `index.html` with your Measurement ID or remove if undesired.
-- Contact form: Sign up at Formspree (https://formspree.io) and replace the `action` URL in the contact form (`index.html`) with your form endpoint.
-- SEO & Social: Update the `og:` meta tags and `link rel=canonical` in `index.html` to your production domain.
-- Custom domain (GitHub Pages): create a `CNAME` file at the repository root with your domain (e.g. `example.com`) and add the same domain in the repository Pages settings. Netlify and Vercel have guided UIs for adding domains and enabling HTTPS.
+You can also serve the repository root with any static HTTP server.
 
-Security & privacy note:
+## Deployment targets
 
-- If you enable analytics or forms, update your privacy policy and include opt-out links where necessary.
+Configuration is retained for GitHub Pages, Vercel, Netlify and Docker/Nginx.
 
-Need help customizing content, connecting a form, or configuring a domain? Tell me your company name, contact email, and domain and I will finish the setup and push the changes.
+The GitHub Actions workflow runs the smoke gate, packages the static site and attempts a Pages deployment from `main`. GitHub Pages must be enabled in repository settings before the final Pages deployment step can succeed.
+
+## Production domain
+
+Primary Richo Systems domain: `https://richosystems.technology/`
+
+The runtime also links to the Richo Systems tools surface at `/tools`.
+
+## Repository structure
+
+- `index.html` — runtime UI and product surfaces
+- `catalog.js` — canonical RSP-001–RSP-053 runtime catalogue
+- `app.js` — scoring, search, selection and readiness engines
+- `styles.css` — responsive runtime interface
+- `tests/smoke.mjs` — pre-deployment verification
+- `.github/workflows/deploy-pages.yml` — CI/deployment workflow
+- `Dockerfile`, `vercel.json`, `netlify.toml` — alternate deployment targets
+
+## Completion standard
+
+A product should not be described as fully production-ready merely because it appears in the catalogue. The shared runtime currently gives all 53 products an executable readiness/control layer. Full product-specific software conversion requires each product to receive its own workflow logic, input/output model, persistence/export requirements where appropriate, acceptance tests, documentation and deployment verification.
