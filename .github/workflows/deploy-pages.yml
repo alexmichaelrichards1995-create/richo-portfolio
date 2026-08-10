@@ -24,6 +24,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Run product smoke tests
+        run: node tests/smoke.mjs
+
       - name: Upload static site
         uses: actions/upload-pages-artifact@v5
         with:
