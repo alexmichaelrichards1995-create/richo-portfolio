@@ -1,0 +1,44 @@
+name: Next.js Supabase Foundation CI
+
+on:
+  push:
+    branches:
+      - agent/nextjs-supabase-foundation
+  pull_request:
+    paths:
+      - 'app/**'
+      - 'lib/**'
+      - 'proxy.ts'
+      - 'next.config.ts'
+      - 'package.json'
+      - 'tsconfig.json'
+      - '.github/workflows/next-supabase-foundation-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
