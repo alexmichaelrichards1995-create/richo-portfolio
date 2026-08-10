@@ -1,0 +1,55 @@
+name: Deploy Upgrade Chat to Netlify
+
+on:
+  push:
+    branches:
+      - main
+      - add-upgrade-chat-widget
+      - deploy-upgrade-chat-netlify
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    name: Deploy to Netlify
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Prepare Netlify functions folder
+        run: |
+          mkdir -p netlify/functions
+          if [ -f netlify_widget_token.js ]; then cp netlify_widget_token.js netlify/functions/widget-token.js; fi
+
+      - name: Install Netlify CLI
+        run: npm install -g netlify-cli
+
+      - name: Install function dependencies (if any)
+        run: |
+          if [ -d netlify/functions ]; then
+            cd netlify/functions
+            if [ -f package.json ]; then
+              npm ci --production || true
+            fi
+            cd -
+          fi
+
+      - name: Deploy to Netlify
+        env:
+          NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
+          NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
+        run: |
+          if [ -z "$NETLIFY_AUTH_TOKEN" ] || [ -z "$NETLIFY_SITE_ID" ]; then
+            echo "ERROR: NETLIFY_AUTH_TOKEN or NETLIFY_SITE_ID secret is not set. Please add them in repository Settings → Secrets."
+            exit 1
+          fi
+          npx netlify deploy --dir=public --functions=netlify/functions --site=$NETLIFY_SITE_ID --prod --auth=$NETLIFY_AUTH_TOKEN --message "Deploy upgrade-chat widget from $GITHUB_REF"
+
+      - name: Confirm deployment
+        run: echo "Deployment finished. If successful, public widget will be served and function available at /.netlify/functions/widget-token"

@@ -1,0 +1,31 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Upgrade Chat Widget</title>
+    <style>body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:12px}</style>
+  </head>
+  <body>
+    <div id="chat-root">Initializing chat widget...</div>
+    <script>
+      function init(token) {
+        var root = document.getElementById('chat-root');
+        root.innerText = 'Chat ready. Token length: ' + (token ? token.length : 'none');
+        // Initialize your front-end client here using the token for authenticated API calls.
+      }
+
+      window.addEventListener('message', function(ev) {
+        try {
+          var msg = ev.data || {};
+          if (msg && msg.type === 'auth.token' && msg.token) {
+            init(msg.token);
+          }
+        } catch (e) { console.error(e); }
+      }, false);
+
+      // Ask parent for a token on load
+      try { window.parent.postMessage({type: 'upgrade_chat_request_token'}, '*'); } catch(e){}
+    </script>
+  </body>
+</html>
