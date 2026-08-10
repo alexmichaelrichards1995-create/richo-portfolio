@@ -1,3 +1,4 @@
+import { FOUNDATION_RUNTIME_SPECS } from './rsp-001-003.spec.mjs';
 import { GOVERNANCE_RUNTIME_SPECS } from './rsp-004-013.spec.mjs';
 import { COMMERCIAL_RUNTIME_SPECS } from './rsp-014-023.spec.mjs';
 import { DELIVERY_RUNTIME_SPECS } from './rsp-024-033.spec.mjs';
@@ -5,6 +6,7 @@ import { TRANSACTION_RUNTIME_SPECS } from './rsp-034-043.spec.mjs';
 import { LEADERSHIP_RUNTIME_SPECS } from './rsp-044-053.spec.mjs';
 
 export const DEEP_RUNTIME_SPECS = Object.freeze({
+  ...FOUNDATION_RUNTIME_SPECS,
   ...GOVERNANCE_RUNTIME_SPECS,
   ...COMMERCIAL_RUNTIME_SPECS,
   ...DELIVERY_RUNTIME_SPECS,
