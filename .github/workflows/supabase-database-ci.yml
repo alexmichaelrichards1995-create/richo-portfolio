@@ -48,6 +48,20 @@ jobs:
       - name: Run pgTAP database tests
         run: npx supabase test db
 
+      - name: Generate database TypeScript types
+        run: |
+          mkdir -p artifacts
+          npx supabase gen types typescript --local > artifacts/database.types.ts
+          test -s artifacts/database.types.ts
+
+      - name: Upload database types artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-types
+          path: artifacts/database.types.ts
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Stop local Supabase
         if: always()
         run: npx supabase stop --no-backup
