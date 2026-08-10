@@ -1,0 +1,27 @@
+name: Deep R.I.C.H.O. Delivery Runtime Validation
+
+on:
+  push:
+    branches: [ agent/deep-rsp-004-013 ]
+    paths:
+      - 'runtime/rsp-024-033.spec.mjs'
+      - 'runtime/product-evaluator.mjs'
+      - 'tests/deep-delivery.mjs'
+      - '.github/workflows/deep-delivery-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate delivery product schemas and gates
+        run: node tests/deep-delivery.mjs
