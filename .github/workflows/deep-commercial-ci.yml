@@ -1,0 +1,27 @@
+name: Deep R.I.C.H.O. Commercial Runtime Validation
+
+on:
+  push:
+    branches: [ agent/deep-rsp-004-013 ]
+    paths:
+      - 'runtime/rsp-014-023.spec.mjs'
+      - 'runtime/product-evaluator.mjs'
+      - 'tests/deep-commercial.mjs'
+      - '.github/workflows/deep-commercial-ci.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate commercial product schemas and gates
+        run: node tests/deep-commercial.mjs
