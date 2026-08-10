@@ -30,15 +30,19 @@ router.post('/stripe/onboard/start', express.json(), async (req, res) => {
           return_url: process.env.STRIPE_ONBOARDING_RETURN_URL || 'https://your-app.example.com/stripe/onboard/complete',
           type: 'account_onboarding',
         });
+        // mark onboarding started in DB if possible
+        try { const db = require('./db/db_client'); await db.upsertConnectedAccount(accountId, created.accountId, 'onboarding_started'); } catch (e) { console.warn('db upsertConnectedAccount failed during onboarding', e && e.message); }
         return res.status(200).json({ connectedAccountId: created.accountId, onboardingUrl: accountLinks.url });
       } catch (err) {
         // fallback to returning the connected id and note that account-links creation failed
+        try { const db = require('./db/db_client'); await db.upsertConnectedAccount(accountId, created.accountId, 'onboarding_started'); } catch (e) {}
         return res.status(200).json({ connectedAccountId: created.accountId, onboardingUrl: null, warning: 'account_links_failed' });
       }
     }
 
     // Fallback stub returns a fake onboarding URL
     const onboardingUrl = `https://stripe.mock/onboard/${created.accountId}`;
+    try { const db = require('./db/db_client'); await db.upsertConnectedAccount(accountId, created.accountId, 'onboarding_started'); } catch (e) {}
     return res.status(200).json({ connectedAccountId: created.accountId, onboardingUrl });
   } catch (err) {
     console.error('onboard/start error', err);
@@ -61,8 +65,21 @@ router.post('/stripe/webhook', bodyParser.raw({ type: 'application/json' }), asy
         const evt = stripe.webhooks.constructEvent(raw, sig, process.env.STRIPE_WEBHOOK_SECRET);
         // Process event types of interest
         if (evt.type === 'account.updated' || evt.type === 'account.application.authorized') {
-          console.log('stripe event', evt.type, evt.data && evt.data.object && evt.data.object.id);
-          // TODO: upsert connected account status in DB
+          const obj = evt.data && evt.data.object;
+          console.log('stripe event', evt.type, obj && obj.id);
+          try {
+            const db = require('./db/db_client');
+            const stripeAccountId = obj && obj.id;
+            const existing = stripeAccountId ? await db.getConnectedAccountByStripeId(stripeAccountId) : null;
+            const chargesEnabled = obj && obj.charges_enabled;
+            const newStatus = chargesEnabled ? 'verified' : 'onboarding_updated';
+            if (existing && existing.account_id) {
+              await db.upsertConnectedAccount(existing.account_id, stripeAccountId, newStatus);
+            } else {
+              // No mapping found — log and skip to avoid inserting null account_id into DB
+              console.log('stripe webhook: no local mapping for stripe account', stripeAccountId);
+            }
+          } catch (e) { console.warn('failed updating connected account status', e && e.message); }
         }
         return res.status(200).send('ok');
       } catch (err) {

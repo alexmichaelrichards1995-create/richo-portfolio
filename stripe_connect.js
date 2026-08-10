@@ -6,6 +6,7 @@
  */
 
 const { schedulePayout, calculateNetRevenue } = require('./stripe_integration');
+const db = require('./db/db_client');
 
 let stripe = null;
 if (process.env.STRIPE_API_KEY) {
@@ -18,11 +19,14 @@ async function createConnectAccount(org) {
     // Minimal create account flow — in production handle KYC and account capabilities
     const acct = await stripe.accounts.create({ type: 'standard', email: org.email || undefined });
     // Persist mapping acct.id -> org.accountId in your DB
+    try { await db.upsertConnectedAccount(org.accountId, acct.id, 'pending'); } catch (e) { console.warn('db upsertConnectedAccount failed', e && e.message); }
     return { connected: true, accountId: acct.id };
   }
   // Fallback stub
+  const stubId = `acct_stub_${org.accountId}`;
   console.log('createConnectAccount (stub)', org);
-  return { connected: true, accountId: `acct_stub_${org.accountId}` };
+  try { await db.upsertConnectedAccount(org.accountId, stubId, 'connected'); } catch (e) { console.warn('db upsertConnectedAccount failed (stub)', e && e.message); }
+  return { connected: true, accountId: stubId };
 }
 
 async function executePayout(month, grossCents, connectedAccountId, options = {}) {
