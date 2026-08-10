@@ -1,10 +1,25 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    name: Product test suite (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20.x, 22.x]
     services:
       postgres:
         image: postgres:15
@@ -14,52 +29,39 @@ jobs:
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
-    strategy:
-      matrix:
-        node-version: [18.x]
+        options: >-
+          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      NODE_ENV: test
+      GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+      STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Use Node.js
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
-
-      - name: Install system deps (psql)
+          cache: npm
+      - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
-
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
-
-      - name: Wait for Postgres
+        run: npm ci
+      - name: Wait for PostgreSQL
         env:
           PGPASSWORD: postgres
         run: |
-          until pg_isready -h localhost -p 5432 -U postgres -d postgres; do sleep 1; done
-
-      - name: Run migrations
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
-
-      - name: Set secrets for tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-        run: echo "secrets set"
-
-      - name: Run tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          node tests/marketplace_webhook_handler.test.js
-          node tests/marketplace_webhook_handler.idempotency.test.js
-          node tests/webhook_signature.integration.test.js
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres -d postgres; then exit 0; fi
+            sleep 1
+          done
+          echo "PostgreSQL failed to become ready" >&2
+          exit 1
+      - name: Run database migrations
+        run: npm run migrate
+      - name: Run complete product test suite
+        run: npm test
