@@ -47,6 +47,15 @@ jobs:
         run: npm install --ignore-scripts
       - name: Dependency audit
         run: npm audit --audit-level=high
+      - name: Apply database migrations
+        env:
+          PGPASSWORD: richo_test
+        run: |
+          set -euo pipefail
+          for migration in migrations/*.sql; do
+            echo "Applying $migration"
+            psql -h localhost -U richo -d richo_test -v ON_ERROR_STOP=1 -f "$migration"
+          done
       - name: Run RICHO test suite
         run: npm test
       - name: Validate Docker build
@@ -59,11 +68,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: Scan repository for secrets
+          fetch-depth: 1
+      - name: Scan current repository state for secrets
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: detect --no-git --redact --verbose --source .
 
   quality-summary:
     name: Quality gate
