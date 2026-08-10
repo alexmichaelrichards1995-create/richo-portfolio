@@ -34,30 +34,44 @@ async function writeStore(obj) {
 }
 
 // Upsert subscription for an account — idempotent by checking existing plan
+const dbClient = require('./db/db_client');
+
 async function upsertSubscription(accountId, plan) {
   if (!accountId) throw new Error('accountId required');
-  const store = await readStore();
-  const existing = store[accountId];
-  if (existing && existing.planId === plan.id) {
-    // already applied
-    return { upserted: false, existing };
-  }
 
   const record = {
     accountId,
-    planId: plan.id,
-    planName: plan.name,
+    account_login: plan.account_login || null,
+    plan_id: plan.id,
+    plan_name: plan.name,
     monthly_price_in_cents: plan.monthly_price_in_cents || null,
+    status: 'active',
+    billing_cycle_start: null,
     updated_at: new Date().toISOString()
   };
-  store[accountId] = record;
-  await writeStore(store);
-  return { upserted: true, record };
+
+  try {
+    const res = await dbClient.upsertSubscription(accountId, record);
+    // When using file store, dbClient returns the record; for Postgres it returns row
+    return { upserted: true, record: res };
+  } catch (e) {
+    // fallback to file store logic if db client fails
+    const store = await readStore();
+    const existing = store[accountId];
+    if (existing && existing.planId === plan.id) return { upserted: false, existing };
+    store[accountId] = record;
+    await writeStore(store);
+    return { upserted: true, record };
+  }
 }
 
 async function getSubscription(accountId) {
-  const store = await readStore();
-  return store[accountId] || null;
+  try {
+    return await dbClient.getSubscription(accountId);
+  } catch (e) {
+    const store = await readStore();
+    return store[accountId] || null;
+  }
 }
 
 module.exports = { upsertSubscription, getSubscription };

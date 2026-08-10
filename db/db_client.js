@@ -6,13 +6,11 @@
 const fs = require('fs');
 const path = require('path');
 
-let pgClient = null;
+let pgPool = null;
 try {
-  const { Client } = require('pg');
-  if (process.env.PGHOST) {
-    pgClient = new Client({
-      connectionString: process.env.DATABASE_URL || undefined,
-    });
+  const { Pool } = require('pg');
+  if (process.env.PGHOST || process.env.DATABASE_URL) {
+    pgPool = new Pool({ connectionString: process.env.DATABASE_URL || undefined });
   }
 } catch (e) {
   // pg not installed — fallback to file store
@@ -43,16 +41,38 @@ async function getSubscriptionFile(accountId) {
 }
 
 async function upsertSubscription(accountId, record) {
-  if (pgClient) {
-    // TODO: implement real upsert with pgClient.connect() and parameterized SQL
-    throw new Error('Postgres upsert not implemented in scaffold');
+  if (pgPool) {
+    const sql = `INSERT INTO subscriptions (account_id, account_login, plan_id, plan_name, monthly_price_in_cents, status, billing_cycle_start, updated_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,now())
+      ON CONFLICT (account_id) DO UPDATE SET
+        plan_id = EXCLUDED.plan_id,
+        plan_name = EXCLUDED.plan_name,
+        monthly_price_in_cents = EXCLUDED.monthly_price_in_cents,
+        status = EXCLUDED.status,
+        updated_at = now()
+      RETURNING *`;
+    const values = [accountId, record.account_login || null, record.plan_id, record.plan_name || null, record.monthly_price_in_cents || null, record.status || 'active', record.billing_cycle_start || null];
+    const client = await pgPool.connect();
+    try {
+      const res = await client.query(sql, values);
+      return res.rows[0];
+    } finally {
+      client.release();
+    }
   }
   return upsertSubscriptionFile(accountId, record);
 }
 
 async function getSubscription(accountId) {
-  if (pgClient) {
-    throw new Error('Postgres get not implemented in scaffold');
+  if (pgPool) {
+    const sql = `SELECT * FROM subscriptions WHERE account_id = $1 LIMIT 1`;
+    const client = await pgPool.connect();
+    try {
+      const res = await client.query(sql, [accountId]);
+      return res.rows[0] || null;
+    } finally {
+      client.release();
+    }
   }
   return getSubscriptionFile(accountId);
 }
