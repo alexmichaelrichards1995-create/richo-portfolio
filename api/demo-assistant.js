@@ -1,4 +1,4 @@
-const { callAI } = require('./ai_v2');
+const { callAI } = require('./ai_v3');
 const fs = require('fs');
 const path = require('path');
 
@@ -57,19 +57,39 @@ module.exports = async (req, res) => {
     }
   }
 
-  const prompt = (body && (body.prompt || body.message)) || 'Summarise the R.I.C.H.O. Product Runtime Hub in one short paragraph.';
   const ip = getIp(req);
 
   if (!checkRateLimit(ip)) {
     return res.status(429).json({ error: 'rate_limited', message: 'Rate limit exceeded' });
   }
 
+  // Support templates: if body.template is set, load from data/prompt-templates.json
+  let prompt = '';
+  if (body && body.template) {
+    try {
+      const tplFile = path.join(__dirname, '..', 'data', 'prompt-templates.json');
+      const tplRaw = await fs.promises.readFile(tplFile, 'utf8');
+      const tplObj = JSON.parse(tplRaw || '{}');
+      const tpl = tplObj[body.template];
+      const context = (body.context || body.prompt || '');
+      if (tpl) {
+        prompt = tpl.replace(/{{\s*context\s*}}/g, context);
+      } else {
+        prompt = context || 'Summarise the R.I.C.H.O. Product Runtime Hub in one short paragraph.';
+      }
+    } catch (e) {
+      prompt = (body.prompt || body.message) || 'Summarise the R.I.C.H.O. Product Runtime Hub in one short paragraph.';
+    }
+  } else {
+    prompt = (body && (body.prompt || body.message)) || 'Summarise the R.I.C.H.O. Product Runtime Hub in one short paragraph.';
+  }
+
   const start = Date.now();
   try {
-    const result = await callAI({ prompt, model: process.env.AI_MODEL || 'gpt-4o', max_tokens: 200 });
+    const result = await callAI({ prompt, model: process.env.AI_MODEL || 'gpt-4o', max_tokens: 400 });
     const duration = Date.now() - start;
     await appendRequestLog({ ts: new Date().toISOString(), ip, prompt: prompt.slice(0, 1000), provider: process.env.AI_PROVIDER || 'mock', model: process.env.AI_MODEL || 'gpt-4o', durationMs: duration, success: true });
-    return res.status(200).json({ ok: true, text: result.text, raw: result.raw || null });
+    return res.status(200).json({ ok: true, text: result.text, raw: result.raw || null, usedTemplate: body && body.template ? body.template : null });
   } catch (err) {
     const duration = Date.now() - start;
     await appendRequestLog({ ts: new Date().toISOString(), ip, prompt: prompt.slice(0, 1000), provider: process.env.AI_PROVIDER || 'mock', model: process.env.AI_MODEL || 'gpt-4o', durationMs: duration, success: false, error: (err && (err.message || String(err))).slice(0, 1000) });
