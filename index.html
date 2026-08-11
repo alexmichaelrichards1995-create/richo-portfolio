@@ -115,7 +115,7 @@
       <section id="buy">
         <div class="eyebrow">Commercial activation</div>
         <h2>Buy software and product packs</h2>
-        <p class="lede">Submit a structured purchase request for any R.I.C.H.O. product. This page prepares your request details and opens your email client so Richo Systems can confirm scope, terms and activation.</p>
+        <p class="lede">Start secure Stripe Checkout for configured offers. If a checkout link is not configured yet, the form falls back to a structured purchase request email so Richo Systems can confirm scope, terms and activation.</p>
         <div class="buy-layout">
           <form id="purchase-form" class="panel buy-form">
             <label for="purchase-product">Product</label>
@@ -141,10 +141,10 @@
             <label for="purchase-notes">Delivery notes / requirements</label>
             <textarea id="purchase-notes" class="text-input" rows="4" placeholder="Team size, timeline, required outcomes, integrations, compliance needs..."></textarea>
             <div class="actions">
-              <button class="button" type="submit">Send purchase request</button>
+              <button class="button" type="submit">Start secure checkout</button>
               <button id="purchase-copy" class="button secondary" type="button">Copy request</button>
             </div>
-            <div id="purchase-output" class="output" aria-live="polite">Select a product, complete your details and send a purchase request.</div>
+            <div id="purchase-output" class="output" aria-live="polite">Select a product and complete your details to start checkout.</div>
           </form>
           <aside class="panel buy-help" aria-label="Sales process">
             <h3>What happens next</h3>
@@ -239,6 +239,7 @@
     <div class="container">© <span id="year"></span> Richo Systems · R.I.C.H.O. product runtime layer · <a href="https://richosystems.technology/">richosystems.technology</a></div>
   </footer>
   <script src="catalog.js" defer></script>
+  <script src="checkout_links.js" defer></script>
   <script src="app.js" defer></script>
 </body>
 </html>

@@ -249,14 +249,42 @@ function updatePurchaseOutput(message) {
   if (output) output.textContent = message;
 }
 
+function getCheckoutLink(productId) {
+  const links = window.RICHO_STRIPE_LINKS || {};
+  const value = links[productId];
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed.startsWith('https://buy.stripe.com/')) return '';
+  return trimmed;
+}
+
+function appendCheckoutEmail(checkoutUrl, email) {
+  if (!checkoutUrl || !email) return checkoutUrl;
+  try {
+    const url = new URL(checkoutUrl);
+    url.searchParams.set('prefilled_email', email);
+    return url.toString();
+  } catch (error) {
+    return checkoutUrl;
+  }
+}
+
 function sendPurchaseRequest() {
   const request = buildPurchaseRequest();
   if (!request) {
     updatePurchaseOutput('Please select a product and complete full name + work email before sending.');
     return;
   }
+  const product = getSelectedPurchaseProduct();
+  const checkoutUrl = product ? getCheckoutLink(product.id) : '';
+  if (checkoutUrl) {
+    updatePurchaseOutput(`Redirecting to secure Stripe Checkout for ${product.id}...`);
+    window.location.href = appendCheckoutEmail(checkoutUrl, document.getElementById('purchase-email')?.value?.trim() || '');
+    return;
+  }
+
   const mailto = `mailto:${SALES_EMAIL}?subject=${encodeURIComponent(request.subject)}&body=${encodeURIComponent(request.body)}`;
-  updatePurchaseOutput(request.body);
+  updatePurchaseOutput(`${request.body}\n\nStripe checkout is not configured for this product yet, so we prepared an email request.`);
   window.location.href = mailto;
 }
 

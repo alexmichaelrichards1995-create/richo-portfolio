@@ -39,6 +39,16 @@ node tests/smoke.mjs
 
 The smoke gate checks required runtime files, removes known scaffold placeholders, verifies the complete unique RSP-001–RSP-053 catalogue and confirms the core runtime functions are present.
 
+## Stripe checkout setup
+
+The Buy section supports direct Stripe-hosted checkout through product-specific Stripe Payment Links.
+
+1. Edit `checkout_links.js`.
+2. Set each product key to its Stripe `https://buy.stripe.com/...` link.
+3. Keep values empty/omitted for products that are still quote-only.
+
+When a checkout link is configured, the form redirects directly to Stripe Checkout. If not configured, the form falls back to a structured purchase request email.
+
 ## Local preview
 
 ### Docker
