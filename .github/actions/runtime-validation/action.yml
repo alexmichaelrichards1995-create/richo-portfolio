@@ -1,0 +1,29 @@
+name: Runtime validation template
+description: Shared setup for Richo runtime validation jobs
+
+inputs:
+  node-version:
+    description: Node.js version to install
+    required: false
+    default: '20'
+  run-automation-test:
+    description: Whether to run tests/automation.mjs
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Run smoke validation
+      shell: bash
+      run: node tests/smoke.mjs
+
+    - name: Run automation validation
+      if: ${{ inputs.run-automation-test == 'true' }}
+      shell: bash
+      run: node tests/automation.mjs

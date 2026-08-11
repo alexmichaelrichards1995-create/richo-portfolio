@@ -1,0 +1,67 @@
+[
+  {
+    "id": "RSP-001",
+    "name": "AI Governance Starter Kit",
+    "family": "Foundation",
+    "category": "Governance",
+    "status": "runtime-ready",
+    "branches": [
+      "main",
+      "copilot/enhance-ci-cd-automation"
+    ],
+    "technology": [
+      "HTML",
+      "CSS",
+      "JavaScript",
+      "GitHub Actions",
+      "Docker"
+    ],
+    "impactMetrics": {
+      "controls": 6,
+      "evidenceAreas": 6,
+      "automationCoverage": "high"
+    }
+  },
+  {
+    "id": "RSP-002",
+    "name": "Paid Pilot Readiness Kit",
+    "family": "Foundation",
+    "category": "Commercial",
+    "status": "runtime-ready",
+    "branches": [
+      "main",
+      "copilot/enhance-ci-cd-automation"
+    ],
+    "technology": [
+      "HTML",
+      "CSS",
+      "JavaScript"
+    ],
+    "impactMetrics": {
+      "controls": 6,
+      "evidenceAreas": 6,
+      "automationCoverage": "medium"
+    }
+  },
+  {
+    "id": "RSP-053",
+    "name": "Internal Audit and Continuous Improvement Kit",
+    "family": "Leadership, Workforce & Operating System",
+    "category": "Assurance",
+    "status": "runtime-ready",
+    "branches": [
+      "main",
+      "copilot/enhance-ci-cd-automation"
+    ],
+    "technology": [
+      "JavaScript",
+      "GitHub Pages",
+      "GitHub Actions"
+    ],
+    "impactMetrics": {
+      "controls": 6,
+      "evidenceAreas": 6,
+      "automationCoverage": "high"
+    }
+  }
+]

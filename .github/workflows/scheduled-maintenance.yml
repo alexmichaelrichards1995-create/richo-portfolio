@@ -1,0 +1,115 @@
+name: Scheduled Maintenance
+
+on:
+  schedule:
+    - cron: '0 5 * * 1'
+    - cron: '0 6 1 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: maintenance-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  dependency-maintenance:
+    name: Weekly and monthly dependency maintenance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Weekly dependency refresh
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 5 * * 1'
+        continue-on-error: true
+        run: |
+          if [ -f package.json ]; then
+            npm install --package-lock-only
+            npm outdated || true
+          else
+            echo "No package.json found; skipping weekly dependency maintenance."
+          fi
+
+      - name: Monthly dependency refresh
+        if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 6 1 * *'
+        continue-on-error: true
+        run: |
+          if [ -f package.json ]; then
+            npm update --package-lock-only
+          else
+            echo "No package.json found; skipping monthly dependency refresh."
+          fi
+
+      - name: Upload dependency maintenance artifacts
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-maintenance
+          path: |
+            package.json
+            package-lock.json
+          if-no-files-found: ignore
+
+  performance-and-quality:
+    name: Performance and quality audits
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Start local static server
+        run: |
+          python3 -m http.server 8080 >/tmp/richo-http.log 2>&1 &
+          echo $! > /tmp/richo-http.pid
+          sleep 2
+
+      - name: Run Lighthouse CI
+        continue-on-error: true
+        uses: treosh/lighthouse-ci-action@v12
+        with:
+          urls: |
+            http://127.0.0.1:8080/index.html
+          configPath: ./config/lighthouserc.json
+          uploadArtifacts: true
+
+      - name: Run SonarCloud analysis
+        if: ${{ secrets.SONAR_TOKEN != '' }}
+        continue-on-error: true
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Stop local static server
+        if: always()
+        run: |
+          if [ -f /tmp/richo-http.pid ]; then
+            kill "$(cat /tmp/richo-http.pid)" || true
+          fi
+
+  backup-verification:
+    name: Backup verification and archives
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create repository archives
+        run: |
+          mkdir -p backups
+          git archive --format=tar.gz -o backups/richo-portfolio-backup.tar.gz HEAD
+          git archive --format=zip -o backups/richo-portfolio-backup.zip HEAD
+          sha256sum backups/richo-portfolio-backup.tar.gz backups/richo-portfolio-backup.zip > backups/SHA256SUMS
+
+      - name: Upload backup artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-artifacts
+          path: backups

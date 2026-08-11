@@ -1,0 +1,18 @@
+{
+  "families": [
+    "Foundation",
+    "Governance, Risk & Assurance",
+    "Commercial & Revenue",
+    "Product & Delivery",
+    "Procurement, Market Access & Transactions",
+    "Leadership, Workforce & Operating System"
+  ],
+  "categories": [
+    "Governance",
+    "Commercial",
+    "Assurance"
+  ],
+  "status": [
+    "runtime-ready"
+  ]
+}

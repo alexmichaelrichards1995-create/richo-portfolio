@@ -1,0 +1,29 @@
+{
+  "skills": [
+    {
+      "name": "Governance automation",
+      "tools": [
+        "GitHub Actions",
+        "Semgrep",
+        "OWASP Dependency-Check"
+      ]
+    },
+    {
+      "name": "Runtime delivery",
+      "tools": [
+        "Docker",
+        "GitHub Pages",
+        "Netlify",
+        "Vercel"
+      ]
+    },
+    {
+      "name": "Portfolio analytics",
+      "tools": [
+        "JavaScript",
+        "Lighthouse CI",
+        "Slack notifications"
+      ]
+    }
+  ]
+}
