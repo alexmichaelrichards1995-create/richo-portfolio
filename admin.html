@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Admin — Richo Systems</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container" style="max-width:1000px;margin:2rem auto;">
+    <h1>Admin — Leads & AI logs</h1>
+    <p>This admin UI is for staging preview only. Protect with ADMIN_SECRET in production.</p>
+
+    <div style="margin-bottom:1rem">
+      <button id="load-leads" class="button">Load leads</button>
+      <button id="download-leads" class="button secondary">Download leads JSON</button>
+      <button id="load-ailogs" class="button" style="margin-left:1rem">Load AI logs</button>
+      <button id="download-ailogs" class="button secondary">Download AI logs</button>
+    </div>
+
+    <section id="leads" style="margin-top:1rem">
+      <h2>Leads</h2>
+      <div id="leads-mount" style="white-space:pre-wrap;background:#fff;padding:1rem;border-radius:6px;border:1px solid #e5e7eb;min-height:120px"></div>
+    </section>
+
+    <section id="ailogs" style="margin-top:2rem">
+      <h2>AI Calls & Requests</h2>
+      <div id="ailogs-mount" style="white-space:pre-wrap;background:#fff;padding:1rem;border-radius:6px;border:1px solid #e5e7eb;min-height:120px"></div>
+    </section>
+
+    <p style="margin-top:1rem;">If your deployment sets ADMIN_SECRET, include it in requests via header <code>x-admin-secret</code>.</p>
+  </main>
+
+  <script>
+    async function fetchJson(path) {
+      const headers = {};
+      // If running in preview, admin secret may be required — auto-read from URL hash like #admin=SECRET
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const secret = hash.get('admin');
+      if (secret) headers['x-admin-secret'] = secret;
+      const res = await fetch(path, { headers });
+      return res.json();
+    }
+
+    document.getElementById('load-leads').addEventListener('click', async () => {
+      const mount = document.getElementById('leads-mount'); mount.textContent = 'Loading...';
+      try {
+        const j = await fetchJson('/api/leads-admin');
+        mount.textContent = JSON.stringify(j, null, 2);
+      } catch (e) { mount.textContent = 'Error: ' + (e && e.message); }
+    });
+
+    document.getElementById('load-ailogs').addEventListener('click', async () => {
+      const mount = document.getElementById('ailogs-mount'); mount.textContent = 'Loading...';
+      try {
+        const j = await fetchJson('/api/ai-logs');
+        mount.textContent = JSON.stringify(j, null, 2);
+      } catch (e) { mount.textContent = 'Error: ' + (e && e.message); }
+    });
+
+    function downloadJSON(obj, name) {
+      const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = name; a.click(); URL.revokeObjectURL(url);
+    }
+
+    document.getElementById('download-leads').addEventListener('click', async () => {
+      const j = await fetchJson('/api/leads-admin');
+      downloadJSON(j.leads || [], 'leads.json');
+    });
+
+    document.getElementById('download-ailogs').addEventListener('click', async () => {
+      const j = await fetchJson('/api/ai-logs');
+      downloadJSON(j, 'ai-logs.json');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "demo_summary": "Summarise the R.I.C.H.O. Product Runtime Hub in a concise paragraph suitable for a sales demo. Include key benefits and a call to action. Context: {{context}}",
+  "sales_pitch": "Write a 2-sentence sales pitch for the following product details: {{context}}",
+  "technical_overview": "Provide a technical overview for engineering reviewers describing architecture, integration points, and scaling considerations. Context: {{context}}",
+  "code_assistant": "You are a helpful code assistant. Given the user prompt: {{context}}, provide a concise explanation and a code snippet if appropriate."
+}
