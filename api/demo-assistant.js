@@ -1,4 +1,41 @@
-const { callAI } = require('./ai');
+const { callAI } = require('./ai_v2');
+const fs = require('fs');
+const path = require('path');
+
+const RATE_LIMIT_WINDOW_MS = Number(process.env.AI_RATE_LIMIT_WINDOW_MS || 60 * 1000);
+const RATE_LIMIT_MAX = Number(process.env.AI_RATE_LIMIT_MAX || 30);
+const REQUEST_LOG = path.join(__dirname, '..', 'data', 'ai_requests.json');
+
+const ipMap = new Map(); // simple in-memory rate limiter (staging preview only)
+
+function getIp(req) {
+  const xf = req.headers['x-forwarded-for'];
+  if (xf) return xf.split(',')[0].trim();
+  return (req.socket && req.socket.remoteAddress) || 'unknown';
+}
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  let st = ipMap.get(ip);
+  if (!st || (now - st.windowStart) > RATE_LIMIT_WINDOW_MS) {
+    st = { windowStart: now, count: 0 };
+  }
+  st.count += 1;
+  ipMap.set(ip, st);
+  return st.count <= RATE_LIMIT_MAX;
+}
+
+async function appendRequestLog(entry) {
+  try {
+    await fs.promises.mkdir(path.dirname(REQUEST_LOG), { recursive: true });
+    let arr = [];
+    try { arr = JSON.parse(await fs.promises.readFile(REQUEST_LOG, 'utf8') || '[]'); } catch (e) { arr = []; }
+    arr.push(entry);
+    await fs.promises.writeFile(REQUEST_LOG, JSON.stringify(arr.slice(-1000), null, 2), 'utf8');
+  } catch (e) {
+    console.warn('appendRequestLog error', e && e.message);
+  }
+}
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
@@ -21,11 +58,21 @@ module.exports = async (req, res) => {
   }
 
   const prompt = (body && (body.prompt || body.message)) || 'Summarise the R.I.C.H.O. Product Runtime Hub in one short paragraph.';
+  const ip = getIp(req);
 
+  if (!checkRateLimit(ip)) {
+    return res.status(429).json({ error: 'rate_limited', message: 'Rate limit exceeded' });
+  }
+
+  const start = Date.now();
   try {
     const result = await callAI({ prompt, model: process.env.AI_MODEL || 'gpt-4o', max_tokens: 200 });
+    const duration = Date.now() - start;
+    await appendRequestLog({ ts: new Date().toISOString(), ip, prompt: prompt.slice(0, 1000), provider: process.env.AI_PROVIDER || 'mock', model: process.env.AI_MODEL || 'gpt-4o', durationMs: duration, success: true });
     return res.status(200).json({ ok: true, text: result.text, raw: result.raw || null });
   } catch (err) {
+    const duration = Date.now() - start;
+    await appendRequestLog({ ts: new Date().toISOString(), ip, prompt: prompt.slice(0, 1000), provider: process.env.AI_PROVIDER || 'mock', model: process.env.AI_MODEL || 'gpt-4o', durationMs: duration, success: false, error: (err && (err.message || String(err))).slice(0, 1000) });
     console.error('demo-assistant error', err && (err.stack || err.message || err));
     return res.status(500).json({ error: 'AI provider error' });
   }
