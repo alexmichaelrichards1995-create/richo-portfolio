@@ -43,6 +43,28 @@ module.exports = async (req, res) => {
     console.warn('Could not persist lead to file store:', e && e.message);
   }
 
-  // In production: forward to CRM/email/notify webhook. This is a staging stub.
-  return res.status(201).json({ ok: true, lead });
+  // If configured, forward lead to CRM webhook (staging/prod). Non-blocking; failures are logged.
+  const crmUrl = process.env.CRM_WEBHOOK_URL;
+  if (crmUrl) {
+    try {
+      const payload = { lead };
+      if (typeof fetch !== 'undefined') {
+        await fetch(crmUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      } else {
+        const https = require('https');
+        const urlObj = new URL(crmUrl);
+        const options = { hostname: urlObj.hostname, path: urlObj.pathname + urlObj.search, method: 'POST', headers: { 'Content-Type': 'application/json' } };
+        await new Promise((resolve, reject) => {
+          const r = https.request(options, (res2) => { res2.on('data', () => {}); res2.on('end', resolve); });
+          r.on('error', reject);
+          r.write(JSON.stringify(payload));
+          r.end();
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to forward lead to CRM webhook:', err && (err.message || err));
+    }
+  }
+
+  return res.status(201).json({ ok: true, lead, forwarded: !!crmUrl });
 };

@@ -6,7 +6,7 @@ Summary of changes
 - Revamped hero headline and CTAs for sales demos.
 - Added Contact Sales page (contact.html) and staging lead endpoint (api/lead.js) that writes to data/leads.json.
 - Inserted GA4 snippet placeholder and CTA analytics tracking in app.js.
-- Added sales assets (assets/sales/demo_script.md, sales.md) and demo screenshots TODO.
+- Added sales assets (assets/sales/demo_script.md, sales.md) and placeholder demo screenshots in assets/sales/screenshots/.
 - Implemented AI infra: api/ai_v2.js (mock/openai), api/demo-assistant.js (rate-limited), demo UI (demo.html), and docs (docs/ai.md).
 - Added CI: .github/workflows/pr-checks.yml (tests) and .github/workflows/pr-audit.yml (Lighthouse/pa11y audit on PRs).
 - Added docs/audit.md and docs/architecture.md.
