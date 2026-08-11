@@ -24,6 +24,7 @@
       <nav aria-label="Primary navigation">
         <a href="#products">Featured</a>
         <a href="#catalog">53 Products</a>
+        <a href="#buy">Buy</a>
         <a href="#tools">Run tools</a>
         <a href="#controls">Controls</a>
         <a href="https://richosystems.technology/tools">Live AI platform</a>
@@ -108,6 +109,52 @@
           <div id="catalog-checklist" class="checklist"></div>
           <button id="catalog-score" class="button" type="button">Run product readiness gate</button>
           <div id="catalog-output" class="output" aria-live="polite">Select a product and run its readiness gate.</div>
+        </div>
+      </section>
+
+      <section id="buy">
+        <div class="eyebrow">Commercial activation</div>
+        <h2>Buy software and product packs</h2>
+        <p class="lede">Submit a structured purchase request for any R.I.C.H.O. product. This page prepares your request details and opens your email client so Richo Systems can confirm scope, terms and activation.</p>
+        <div class="buy-layout">
+          <form id="purchase-form" class="panel buy-form">
+            <label for="purchase-product">Product</label>
+            <select id="purchase-product" class="text-input"></select>
+            <div class="field-grid">
+              <div>
+                <label for="purchase-name">Full name</label>
+                <input id="purchase-name" class="text-input" type="text" required />
+              </div>
+              <div>
+                <label for="purchase-email">Work email</label>
+                <input id="purchase-email" class="text-input" type="email" required />
+              </div>
+              <div>
+                <label for="purchase-company">Company</label>
+                <input id="purchase-company" class="text-input" type="text" />
+              </div>
+              <div>
+                <label for="purchase-budget">Indicative budget (AUD)</label>
+                <input id="purchase-budget" class="text-input" type="text" placeholder="e.g. 5000" />
+              </div>
+            </div>
+            <label for="purchase-notes">Delivery notes / requirements</label>
+            <textarea id="purchase-notes" class="text-input" rows="4" placeholder="Team size, timeline, required outcomes, integrations, compliance needs..."></textarea>
+            <div class="actions">
+              <button class="button" type="submit">Send purchase request</button>
+              <button id="purchase-copy" class="button secondary" type="button">Copy request</button>
+            </div>
+            <div id="purchase-output" class="output" aria-live="polite">Select a product, complete your details and send a purchase request.</div>
+          </form>
+          <aside class="panel buy-help" aria-label="Sales process">
+            <h3>What happens next</h3>
+            <ol>
+              <li>Your request is sent to the Richo Systems sales inbox.</li>
+              <li>Scope, licence terms, price and delivery method are confirmed.</li>
+              <li>You receive the formal quote and activation steps.</li>
+            </ol>
+            <p class="fine-print">Submitting a request does not charge a payment method, create a contract, or auto-activate a licence.</p>
+          </aside>
         </div>
       </section>
 

@@ -66,6 +66,10 @@ section{padding:3rem 0}
 .catalog-item small{color:var(--muted)}
 .catalog-assessment{margin-top:1.25rem}
 .catalog-assessment select{margin:.4rem 0 1rem}
+.buy-layout{display:grid;grid-template-columns:1.3fr .7fr;gap:1rem;align-items:start}
+.buy-form label{display:block;font-weight:600;margin:.5rem 0}
+.field-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.8rem}
+.buy-help ol{margin:.7rem 0 1rem;padding-left:1.1rem}
 .site-footer{border-top:1px solid var(--line);margin-top:3rem;padding:2rem 0;color:var(--muted)}
-@media(max-width:850px){.hero{grid-template-columns:1fr}.grid,.tool-grid,.catalog-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.site-header .container{align-items:flex-start;flex-direction:column}.catalog-controls{align-items:stretch;flex-direction:column}}
+@media(max-width:850px){.hero{grid-template-columns:1fr}.grid,.tool-grid,.catalog-grid,.buy-layout,.field-grid{grid-template-columns:1fr}.stats{grid-template-columns:repeat(2,1fr)}.site-header .container{align-items:flex-start;flex-direction:column}.catalog-controls{align-items:stretch;flex-direction:column}}
 @media(max-width:520px){.stats{grid-template-columns:1fr}nav{gap:.65rem}.hero{padding-top:3rem}h1{font-size:2.7rem}}

@@ -82,6 +82,14 @@ const familyChecks = {
   ]
 };
 
+const SALES_EMAIL = 'sales@richosystems.technology';
+const featuredOffers = {
+  'RSP-001': { label: 'A$2,950 + GST', billing: 'one-off' },
+  'RSP-002': { label: 'A$4,950 + GST', billing: 'one-off' },
+  'RSP-003': { label: 'A$7,500 + GST', billing: 'one-off' },
+  'BUNDLE-TRILOGY': { label: 'A$12,500 + GST', billing: 'one-off' }
+};
+
 function readinessState(score) {
   if (score >= 85) return ['READY FOR HUMAN REVIEW','Readiness evidence is substantially complete. A named human must still review and approve activation.'];
   if (score >= 60) return ['CONDITIONAL','Core controls exist, but material gaps should be closed before activation.'];
@@ -179,6 +187,90 @@ function scoreCatalogProduct() {
   renderOutput('catalog-output', score, state, message, missing);
 }
 
+function populatePurchaseProducts() {
+  const select = document.getElementById('purchase-product');
+  if (!select) return;
+  const catalog = window.RICHO_CATALOG || [];
+  const options = [];
+  options.push('<option value="">Select product</option>');
+  options.push(`<option value="BUNDLE-TRILOGY" data-price="${featuredOffers['BUNDLE-TRILOGY'].label}" data-billing="${featuredOffers['BUNDLE-TRILOGY'].billing}">Commercial Readiness Trilogy — ${featuredOffers['BUNDLE-TRILOGY'].label}</option>`);
+  for (const product of catalog) {
+    const offer = featuredOffers[product.id] || { label: 'Price on request', billing: 'custom' };
+    options.push(`<option value="${product.id}" data-price="${offer.label}" data-billing="${offer.billing}">${product.id} — ${product.name} (${offer.label})</option>`);
+  }
+  select.innerHTML = options.join('');
+}
+
+function getSelectedPurchaseProduct() {
+  const select = document.getElementById('purchase-product');
+  const value = select?.value || '';
+  if (!value || !select) return null;
+  const selected = select.options[select.selectedIndex];
+  const label = selected?.textContent || value;
+  return {
+    id: value,
+    label,
+    price: selected?.dataset.price || 'Price on request',
+    billing: selected?.dataset.billing || 'custom'
+  };
+}
+
+function buildPurchaseRequest() {
+  const name = document.getElementById('purchase-name')?.value?.trim() || '';
+  const email = document.getElementById('purchase-email')?.value?.trim() || '';
+  const company = document.getElementById('purchase-company')?.value?.trim() || '';
+  const budget = document.getElementById('purchase-budget')?.value?.trim() || '';
+  const notes = document.getElementById('purchase-notes')?.value?.trim() || '';
+  const product = getSelectedPurchaseProduct();
+  if (!product || !name || !email) return null;
+
+  const lines = [
+    'R.I.C.H.O. PURCHASE REQUEST',
+    `Product: ${product.id}`,
+    `Offer: ${product.label}`,
+    `Price: ${product.price}`,
+    `Billing type: ${product.billing}`,
+    `Buyer name: ${name}`,
+    `Buyer email: ${email}`,
+    `Company: ${company || 'Not provided'}`,
+    `Budget (AUD): ${budget || 'Not provided'}`,
+    `Notes: ${notes || 'None provided'}`,
+    `Requested at: ${new Date().toISOString()}`
+  ];
+
+  return {
+    subject: `Purchase request - ${product.id}`,
+    body: lines.join('\n')
+  };
+}
+
+function updatePurchaseOutput(message) {
+  const output = document.getElementById('purchase-output');
+  if (output) output.textContent = message;
+}
+
+function sendPurchaseRequest() {
+  const request = buildPurchaseRequest();
+  if (!request) {
+    updatePurchaseOutput('Please select a product and complete full name + work email before sending.');
+    return;
+  }
+  const mailto = `mailto:${SALES_EMAIL}?subject=${encodeURIComponent(request.subject)}&body=${encodeURIComponent(request.body)}`;
+  updatePurchaseOutput(request.body);
+  window.location.href = mailto;
+}
+
+function copyPurchaseRequest() {
+  const request = buildPurchaseRequest();
+  if (!request) {
+    updatePurchaseOutput('Please select a product and complete full name + work email before copying.');
+    return;
+  }
+  navigator.clipboard?.writeText(request.body).then(() => {
+    updatePurchaseOutput(`${request.body}\n\nCopied to clipboard.`);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('[data-score]').forEach(button => button.addEventListener('click', () => scoreProduct(button.dataset.score)));
   document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', () => copyResult(button.dataset.copy)));
@@ -192,6 +284,18 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((window.RICHO_CATALOG || []).length) selectCatalogProduct(window.RICHO_CATALOG[0].id);
   }
   document.getElementById('catalog-score')?.addEventListener('click', scoreCatalogProduct);
+  populatePurchaseProducts();
+  selector?.addEventListener('change', () => {
+    const purchase = document.getElementById('purchase-product');
+    if (purchase && [...purchase.options].some(option => option.value === selector.value)) {
+      purchase.value = selector.value;
+    }
+  });
+  document.getElementById('purchase-form')?.addEventListener('submit', (event) => {
+    event.preventDefault();
+    sendPurchaseRequest();
+  });
+  document.getElementById('purchase-copy')?.addEventListener('click', copyPurchaseRequest);
 
   const year = document.getElementById('year');
   if (year) year.textContent = new Date().getFullYear();
