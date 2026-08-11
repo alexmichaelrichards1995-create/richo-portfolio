@@ -195,4 +195,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const year = document.getElementById('year');
   if (year) year.textContent = new Date().getFullYear();
+
+  // Analytics: track CTA clicks via gtag if available
+  function trackCTA(label) {
+    try { if (typeof gtag === 'function') gtag('event', 'click', { event_category: 'CTA', event_label: label }); } catch (e) {}
+  }
+  document.querySelectorAll('.button').forEach(btn => btn.addEventListener('click', () => {
+    const label = (btn.textContent || btn.getAttribute('aria-label') || btn.href || 'cta').toString().trim().slice(0,60);
+    trackCTA(label);
+  }));
 });
