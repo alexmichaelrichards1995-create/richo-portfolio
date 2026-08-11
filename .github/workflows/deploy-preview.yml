@@ -1,0 +1,36 @@
+name: Deploy Preview to Vercel
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - 'alexmichaelrichards1995-create-automatic-funicular'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install (no-op safe)
+        run: npm ci --no-audit --no-fund || true
+
+      - name: Deploy to Vercel
+        if: ${{ secrets.VERCEL_TOKEN != '' }}
+        uses: amondnet/vercel-action@v20
+        with:
+          vercel-token: ${{ secrets.VERCEL_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: ./
+          vercel-args: --prebuilt
+
+      - name: Skip deploy (no token)
+        if: ${{ secrets.VERCEL_TOKEN == '' }}
+        run: echo "VERCEL_TOKEN not found; skipping preview deploy. Configure VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID to enable."

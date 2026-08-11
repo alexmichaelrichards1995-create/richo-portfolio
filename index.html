@@ -12,7 +12,10 @@
   <meta property="og:image" content="assets/logo.svg" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="canonical" href="https://richosystems.technology/" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="styles.css"></noscript>
+  <link rel="preconnect" href="https://www.googletagmanager.com" crossorigin>
+  <link rel="preconnect" href="https://www.google-analytics.com" crossorigin>
   <!-- GA4 placeholder: replace G-XXXXXXX with your measurement id -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXX"></script>
   <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config','G-XXXXXXX');</script>
