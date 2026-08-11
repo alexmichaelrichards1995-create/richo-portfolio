@@ -195,4 +195,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const year = document.getElementById('year');
   if (year) year.textContent = new Date().getFullYear();
+
+  window.RICHO_CTA_EVENTS = window.RICHO_CTA_EVENTS || [];
+  window._richoTrack = window._richoTrack || function (event) {
+    window.RICHO_CTA_EVENTS.push(event);
+    if (typeof window.richoTrackEvent === 'function') window.richoTrackEvent(event);
+  };
 });
