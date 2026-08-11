@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675">
+  <rect width="100%" height="100%" fill="#07111f"/>
+  <text x="64" y="110" fill="#eef6ff" style="font-size:36px;font-weight:800;font-family:Inter,Arial">R.I.C.H.O. Product Runtime Hub</text>
+  <text x="64" y="170" fill="#9fb2c7" style="font-size:22px">Turn readiness into confident product launches</text>
+  <g transform="translate(64,220)">
+    <rect width="520" height="120" rx="12" fill="#0d1b2a" stroke="#213a53"/>
+    <text x="24" y="46" fill="#6ee7ff" style="font-size:20px;font-weight:800">Quick demo</text>
+    <text x="24" y="78" fill="#eef6ff" style="font-size:18px">Interactive client-side readiness checks for AI, pilots & IP</text>
+  </g>
+  <text x="64" y="380" fill="#eef6ff" style="font-size:20px">Try demo • Contact sales • Book guided review</text>
+</svg>

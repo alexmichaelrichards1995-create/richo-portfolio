@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Pricing & Contact | R.I.C.H.O. — Richo Systems</title>
+  <meta name="description" content="Pricing and contact for R.I.C.H.O. product runtimes." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.svg" alt="R.I.C.H.O. logo" />
+        <span><strong>R.I.C.H.O.</strong><span>Research Intelligence & Continuous Heuristic Optimisation</span></span>
+      </a>
+      <nav aria-label="Primary navigation">
+        <a href="index.html#products">Featured</a>
+        <a href="index.html#catalog">53 Products</a>
+        <a href="index.html#tools">Run tools</a>
+        <a href="index.html#controls">Controls</a>
+        <a href="index.html">Home</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <section class="hero">
+        <div>
+          <div class="eyebrow">Pricing & Contact</div>
+          <h1>Simple pricing and guided sales</h1>
+          <p class="lede">Indicative catalogue pricing for flagship kits; contact sales to discuss licensing, scope, and activation. Use the contact form below to request a demo or a custom quote.</p>
+          <div class="actions">
+            <a class="button" href="index.html#governance-tool" data-cta="try-demo">Try demo</a>
+            <a class="button secondary" href="#contact" data-cta="contact-sales">Contact sales</a>
+          </div>
+        </div>
+      </section>
+
+      <section id="pricing">
+        <h2>Featured packages</h2>
+        <div class="grid">
+          <article class="product-card">
+            <span class="badge">RSP-001</span>
+            <h3>AI Governance Starter Kit</h3>
+            <div class="price">A$2,950 + GST*</div>
+          </article>
+          <article class="product-card">
+            <span class="badge">RSP-002</span>
+            <h3>Paid Pilot Readiness Kit</h3>
+            <div class="price">A$4,950 + GST*</div>
+          </article>
+          <article class="product-card">
+            <span class="badge">RSP-003</span>
+            <h3>Buyer-Ready IP &amp; Due-Diligence</h3>
+            <div class="price">A$7,500 + GST*</div>
+          </article>
+        </div>
+        <p class="fine-print">*Indicative only — final scope and pricing subject to review.</p>
+      </section>
+
+      <section id="contact">
+        <div class="panel" role="region" aria-labelledby="contact-title">
+          <h2 id="contact-title">Contact & Request a Quote</h2>
+          <p class="lede">Fill in your details and we'll get back within 48 hours. This is a demo form; if no backend is configured submissions are stored locally in your browser.</p>
+          <form id="lead-form" class="contact-form" aria-labelledby="contact-title">
+            <label>Full name <input name="name" type="text" required /></label>
+            <label>Work email <input name="email" type="email" required /></label>
+            <label>Company <input name="company" type="text" /></label>
+            <label>Product interest <select name="product">
+              <option value="RSP-001">RSP-001 — AI Governance Starter Kit</option>
+              <option value="RSP-002">RSP-002 — Paid Pilot Readiness Kit</option>
+              <option value="RSP-003">RSP-003 — Buyer-Ready IP &amp; Due-Diligence</option>
+              <option value="other">Other / Custom</option>
+            </select></label>
+            <label>Message <textarea name="message" rows="4"></textarea></label>
+            <button type="submit" class="button" data-cta="submit-lead">Request contact</button>
+            <div id="lead-feedback" class="output" aria-live="polite"></div>
+          </form>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">© <span id="year"></span> Richo Systems · R.I.C.H.O.</div>
+  </footer>
+
+  <script src="app.js" defer></script>
+  <script src="lead.js" defer></script>
+</body>
+</html>
