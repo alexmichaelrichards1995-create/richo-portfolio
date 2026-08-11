@@ -1,0 +1,42 @@
+name: PR Lighthouse & Accessibility Audit
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install global tools
+        run: |
+          npm install -g http-server lighthouse pa11y || true
+
+      - name: Serve site
+        run: |
+          npx http-server -p 8080 -c-1 . &
+          sleep 2
+
+      - name: Run Lighthouse
+        run: |
+          npx lighthouse http://127.0.0.1:8080 --quiet --no-update-notifier --chrome-flags="--headless" --output=json --output-path=./lighthouse.json || true
+
+      - name: Run Pa11y accessibility check
+        run: |
+          npx pa11y http://127.0.0.1:8080/index.html --reporter html > pa11y-report.html || true
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: audit-artifacts
+          path: |
+            lighthouse.json
+            pa11y-report.html

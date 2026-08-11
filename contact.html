@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Contact Sales · Richo Systems</title>
+  <meta name="description" content="Contact Richo Systems sales for demos, pricing, and procurement." />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container">
+      <a class="brand" href="index.html">
+        <img src="assets/logo.svg" alt="R.I.C.H.O. logo" />
+        <span><strong>R.I.C.H.O.</strong></span>
+      </a>
+    </div>
+  </header>
+
+  <main class="container" style="max-width:720px;margin:2rem auto;">
+    <h1>Contact Sales</h1>
+    <p>Tell us which product(s) you're interested in and we'll respond with pricing, demo links, and next steps.</p>
+
+    <form id="lead-form">
+      <label for="name">Name</label>
+      <input id="name" name="name" type="text" required />
+
+      <label for="email">Email</label>
+      <input id="email" name="email" type="email" required />
+
+      <label for="company">Company</label>
+      <input id="company" name="company" type="text" />
+
+      <label for="product">Product of interest</label>
+      <input id="product" name="product" type="text" placeholder="e.g. RSP-001" required />
+
+      <label for="message">Message</label>
+      <textarea id="message" name="message" rows="5"></textarea>
+
+      <div style="margin-top:1rem;">
+        <button type="submit" class="button">Send enquiry</button>
+        <a href="index.html" class="button secondary" style="margin-left:0.5rem">Back</a>
+      </div>
+
+      <div id="lead-status" aria-live="polite" style="margin-top:1rem"></div>
+    </form>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">© <span id="year"></span> Richo Systems</div>
+  </footer>
+
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    document.getElementById('lead-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const status = document.getElementById('lead-status');
+      status.textContent = 'Sending...';
+      const data = Object.fromEntries(new FormData(e.target).entries());
+      try {
+        const res = await fetch('/api/lead', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
+        });
+        if (!res.ok) throw new Error('Network response not ok');
+        const json = await res.json();
+        status.textContent = 'Thanks — your enquiry has been received. We will contact you shortly.';
+        e.target.reset();
+      } catch (err) {
+        console.error(err);
+        status.textContent = 'Sorry — there was a problem sending your enquiry. Please email sales@richosystems.technology';
+      }
+    });
+  </script>
+</body>
+</html>

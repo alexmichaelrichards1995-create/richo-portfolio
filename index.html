@@ -12,13 +12,19 @@
   <meta property="og:image" content="assets/logo.svg" />
   <meta name="twitter:card" content="summary_large_image" />
   <link rel="canonical" href="https://richosystems.technology/" />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="preload" href="styles.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
+  <noscript><link rel="stylesheet" href="styles.css"></noscript>
+  <link rel="preconnect" href="https://www.googletagmanager.com" crossorigin>
+  <link rel="preconnect" href="https://www.google-analytics.com" crossorigin>
+  <!-- GA4 placeholder: replace G-XXXXXXX with your measurement id -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXX"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js', new Date());gtag('config','G-XXXXXXX');</script>
 </head>
 <body>
   <header class="site-header">
     <div class="container">
-      <a class="brand" href="#top">
-        <img src="assets/logo.svg" alt="R.I.C.H.O. logo" />
+      <a class="brand" href="#top" aria-label="Richo Systems home">
+        <img src="assets/logo.svg" alt="R.I.C.H.O. logo" width="48" height="48" loading="eager" />
         <span><strong>R.I.C.H.O.</strong><span>Research Intelligence & Continuous Heuristic Optimisation</span></span>
       </a>
       <nav aria-label="Primary navigation">
@@ -35,12 +41,12 @@
     <div class="container">
       <section class="hero">
         <div>
-          <div class="eyebrow">Functional digital product layer</div>
-          <h1>R.I.C.H.O. products that do work.</h1>
-          <p class="lede">This runtime hub converts the R.I.C.H.O. commercial catalogue into usable browser-based product gates. It includes three specialised readiness tools plus a common runtime for all 53 RSP products. Each assessment exposes evidence gaps and keeps consequential approval with a human.</p>
+          <div class="eyebrow">Turn readiness into confident product launches</div>
+          <h1>Run product readiness checks in minutes</h1>
+          <p class="lede">Structured, human-gated readiness assessments for AI, pilots and IP: quicker evidence discovery, repeatable controls, and clear next steps. Try the interactive demo or contact sales to book a guided review.</p>
           <div class="actions">
-            <a class="button" href="#catalog">Explore all 53 products</a>
-            <a class="button secondary" href="https://richosystems.technology/">Open Richo Systems</a>
+            <a class="button" href="#governance-tool" data-cta="try-demo">Try demo</a>
+            <a class="button secondary" href="pricing.html#contact" data-cta="contact-sales">Contact sales</a>
           </div>
         </div>
         <aside class="panel hero-panel" aria-label="Runtime summary">

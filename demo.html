@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Demo Assistant · Richo Systems</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="container" style="max-width:800px;margin:2rem auto;">
+    <h1>Demo Assistant</h1>
+    <p>Use the assistant to generate a short summary suitable for demos. This uses the staging AI provider (mock by default).</p>
+
+    <label for="template">Template</label>
+    <select id="template" style="width:100%;margin-bottom:0.5rem">
+      <option value="custom">-- Custom prompt --</option>
+    </select>
+
+    <label for="prompt">Prompt / Context</label>
+    <textarea id="prompt" rows="4" style="width:100%">Summarise the R.I.C.H.O. Product Runtime Hub in one short paragraph.</textarea>
+    <div style="margin-top:1rem">
+      <button id="run" class="button">Run assistant</button>
+      <a href="index.html" class="button secondary" style="margin-left:0.5rem">Back</a>
+    </div>
+
+    <div id="result" style="margin-top:1.5rem;white-space:pre-wrap;background:#f9f9f9;padding:1rem;border-radius:6px;min-height:80px"></div>
+  </main>
+
+  <script>
+    async function loadTemplates() {
+      try {
+        const res = await fetch('/api/prompt-templates');
+        if (!res.ok) return;
+        const j = await res.json();
+        const select = document.getElementById('template');
+        const templates = j.templates || {};
+        Object.keys(templates).forEach(key => {
+          const opt = document.createElement('option'); opt.value = key; opt.textContent = key; select.appendChild(opt);
+        });
+      } catch (e) { /* ignore */ }
+    }
+
+    document.getElementById('run').addEventListener('click', async () => {
+      const btn = document.getElementById('run');
+      const resBox = document.getElementById('result');
+      btn.disabled = true; btn.textContent = 'Running...';
+      resBox.textContent = '';
+      try {
+        const template = document.getElementById('template').value;
+        const context = document.getElementById('prompt').value;
+        const body = template && template !== 'custom' ? { template, context } : { prompt: context };
+        const r = await fetch('/api/demo-assistant', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) throw new Error('Network error');
+        const j = await r.json();
+        resBox.textContent = j.text || JSON.stringify(j, null, 2);
+      } catch (e) {
+        resBox.textContent = 'Error: ' + (e && e.message);
+      } finally { btn.disabled = false; btn.textContent = 'Run assistant'; }
+    });
+
+    loadTemplates();
+  </script>
+</body>
+</html>
