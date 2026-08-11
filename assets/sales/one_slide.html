@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Richo Systems — One Slide Summary</title>
+  <style>
+    body{font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial; margin:0; background:#fff; color:#0f172a}
+    .slide{width:1120px; margin:40px auto; border:1px solid #e6eef6; padding:36px; box-shadow:0 10px 30px rgba(15,23,42,0.06)}
+    h1{font-size:40px; margin:0 0 12px}
+    .sub{color:#475569; margin-bottom:18px}
+    .cols{display:flex; gap:28px}
+    .col{flex:1}
+    .badge{display:inline-block;background:#eef2ff;color:#3730a3;padding:6px 10px;border-radius:999px;font-weight:600;margin-bottom:12px}
+    ul{margin:8px 0 0 20px}
+    .cta{margin-top:20px}
+    .cta a{background:#0b69ff;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700}
+    .footer{font-size:13px;color:#6b7280;margin-top:24px}
+    img.mock{width:100%;height:auto;border-radius:6px;border:1px solid #e9eef6}
+    @media print{ body{margin:0} .slide{box-shadow:none;border:none; width:100%;}} 
+  </style>
+</head>
+<body>
+  <article class="slide">
+    <header>
+      <div class="badge">R.I.C.H.O. Product Runtime Hub</div>
+      <h1>Buyer‑ready AI product runtimes for enterprise</h1>
+      <div class="sub">Turn product templates into auditable browser runtimes that surface evidence gaps, enforce human gating, and accelerate pilots.</div>
+    </header>
+
+    <div class="cols">
+      <section class="col">
+        <h3>What it does</h3>
+        <ul>
+          <li>53 curated product runtimes (RSP‑001…RSP‑053)</li>
+          <li>Three flagship readiness engines: Governance, Pilot, Diligence</li>
+          <li>Client-side deterministic scoring and evidence capture</li>
+        </ul>
+
+        <h3 style="margin-top:18px">Benefits</h3>
+        <ul>
+          <li>Faster, auditable procurement and pilot activation</li>
+          <li>Repeatable handoff with clear acceptance criteria</li>
+          <li>Sales-ready demo assistant and admin preview tooling</li>
+        </ul>
+      </section>
+
+      <aside class="col">
+        <h3>Demo & Sales</h3>
+        <p class="sub">Use the staging demo to run a readiness gate and the admin UI to review leads and AI logs.</p>
+        <img class="mock" src="assets/sales/screenshots/screenshot-demo.svg" alt="Demo UI screenshot" />
+
+        <div class="cta">
+          <a href="/demo.html">Run demo</a>
+          <span style="margin-left:12px;color:#94a3b8;font-weight:600">Contact: sales@richosystems.technology</span>
+        </div>
+
+        <div class="footer">Pricing examples: RSP‑001 A$2,950 • RSP‑002 A$4,950 • Bundle A$12,500 (indicative)</div>
+      </aside>
+
+      <section class="col">
+        <h3>Staging & Production</h3>
+        <ul>
+          <li>Preview deploys via Vercel/Netlify (PR previews)</li>
+          <li>AI provider-agnostic (mock/openai) with safeguards and daily caps</li>
+          <li>Lead capture stub + optional CRM webhook forwarding</li>
+        </ul>
+
+        <h3 style="margin-top:18px">Next steps</h3>
+        <ul>
+          <li>Configure OPENAI_API_KEY and VERCEL_TOKEN for live previews</li>
+          <li>Replace file-backed leads with CRM/DB integration in production</li>
+          <li>Run PR audit (Lighthouse / Pa11y) and fix any flagged issues</li>
+        </ul>
+      </section>
+    </div>
+
+    <footer style="margin-top:20px;color:#475569">Generated for branch: <strong>alexmichaelrichards1995-create-automatic-funicular</strong></footer>
+  </article>
+</body>
+</html>
