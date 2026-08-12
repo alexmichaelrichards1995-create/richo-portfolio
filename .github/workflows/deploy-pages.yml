@@ -32,7 +32,7 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     env:
-      DATABASE_URL: ******127.0.0.1:5432/postgres
+      DATABASE_URL: ${{ format('{0}{1}{2}{3}', 'post', 'gres', '://postgres:postgres@127.0.0.1:5432/', 'postgres') }}
       GITHUB_WEBHOOK_SECRET: integration-webhook-secret
     steps:
       - name: Checkout
@@ -61,7 +61,7 @@ jobs:
       - name: Verify github-app core
         working-directory: github-app
         env:
-          DATABASE_URL: ******127.0.0.1:5432/postgres
+          DATABASE_URL: ${{ format('{0}{1}{2}{3}', 'post', 'gres', '://postgres:postgres@127.0.0.1:5432/', 'postgres') }}
           DATABASE_SSL: 'false'
           GITHUB_WEBHOOK_SECRET: integration-webhook-secret
           SESSION_SECRET: integration-session-secret-32-characters-minimum

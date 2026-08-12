@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env bash
+#!/usr/bin/env bash
 # Apply SQL migration files in migrations/ to the provided DATABASE_URL
 # Usage: ./scripts/run_migrations.sh <DATABASE_URL>
 
@@ -17,4 +17,3 @@ for f in migrations/*.sql; do
 done
 
 echo "Migrations applied."
-

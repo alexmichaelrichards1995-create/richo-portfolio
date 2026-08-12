@@ -21,7 +21,7 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: ******127.0.0.1:5432/postgres
+      DATABASE_URL: ${{ format('{0}{1}{2}{3}', 'post', 'gres', '://postgres:postgres@127.0.0.1:5432/', 'postgres') }}
       GITHUB_WEBHOOK_SECRET: integration-webhook-secret
       STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
 

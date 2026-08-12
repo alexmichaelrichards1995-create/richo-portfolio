@@ -12,9 +12,11 @@ let pgPool = null;
 try {
   const { Pool } = require('pg');
   if (process.env.PGHOST || process.env.DATABASE_URL) {
+    const sslEnabled = process.env.DATABASE_SSL === 'true';
+    const rejectUnauthorized = process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false';
     pgPool = new Pool({
       connectionString: process.env.DATABASE_URL || undefined,
-      ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+      ssl: sslEnabled ? { rejectUnauthorized } : undefined,
     });
   }
 } catch (e) {

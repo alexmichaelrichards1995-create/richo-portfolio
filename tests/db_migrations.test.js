@@ -4,7 +4,11 @@
 const { Client } = require('pg');
 
 (async () => {
-  const connection = process.env.DATABASE_URL || '******localhost:5432/postgres';
+  const connection = process.env.DATABASE_URL;
+  if (!connection) {
+    console.error('FAILED: DATABASE_URL is required');
+    process.exit(1);
+  }
   const c = new Client({ connectionString: connection });
   try {
     await c.connect();

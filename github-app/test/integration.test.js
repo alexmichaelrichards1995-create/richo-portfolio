@@ -20,17 +20,17 @@ async function waitFor(url, timeoutMs = 10000) {
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
-
-  async function waitForCondition(checkFn, timeoutMs = 12000) {
-    const started = Date.now();
-    while (Date.now() - started < timeoutMs) {
-      const value = await checkFn();
-      if (value) return value;
-      await new Promise((resolve) => setTimeout(resolve, 150));
-    }
-    throw new Error('Timed out waiting for condition');
-  }
   throw new Error(`Timed out waiting for ${url}`);
+}
+
+async function waitForCondition(checkFn, timeoutMs = 12000) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const value = await checkFn();
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error('Timed out waiting for condition');
 }
 
 async function sendWebhook(baseUrl, secret, delivery, event, payload) {
@@ -82,7 +82,7 @@ integration('Marketplace lifecycle and delivery idempotency persist correctly', 
   assert.equal(response.status, 401);
   response = await fetch(`${baseUrl}/admin/jobs`, { headers: { 'x-admin-token': 'integration-admin-token' } });
   assert.equal(response.status, 200);
-  response = await fetch(`${baseUrl}/dashboard`);
+  response = await fetch(`${baseUrl}/dashboard`, { redirect: 'manual' });
   assert.equal(response.status, 302);
   assert.equal(response.headers.get('location'), '/auth/github');
 
