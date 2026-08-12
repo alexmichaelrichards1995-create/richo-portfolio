@@ -58,10 +58,13 @@ jobs:
       - name: Validate static runtime smoke gate
         run: node tests/smoke.mjs
 
+      - name: Prepare github-app database
+        run: psql "$DATABASE_URL" -c "CREATE DATABASE richo_github_app;"
+
       - name: Verify github-app core
         working-directory: github-app
         env:
-          DATABASE_URL: ${{ format('{0}{1}{2}{3}', 'post', 'gres', '://postgres:postgres@127.0.0.1:5432/', 'postgres') }}
+          DATABASE_URL: ${{ format('{0}{1}{2}{3}', 'post', 'gres', '://postgres:postgres@127.0.0.1:5432/', 'richo_github_app') }}
           DATABASE_SSL: 'false'
           GITHUB_WEBHOOK_SECRET: integration-webhook-secret
           SESSION_SECRET: integration-session-secret-32-characters-minimum

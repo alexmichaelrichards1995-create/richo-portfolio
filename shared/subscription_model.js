@@ -1,4 +1,5 @@
 const FREE_PLAN_NAME = 'Free';
+const EFFECTIVE_DATE_BUFFER_MS = 1000;
 
 function normalizePlanName(name) {
   const value = String(name || '').trim();
@@ -26,7 +27,7 @@ function featuresForTier(tier = 'free') {
 
 function deriveStatus(action, tier, effectiveAt = null) {
   if (action === 'cancelled') {
-    if (effectiveAt && effectiveAt.getTime() > Date.now() + 1000) return 'cancellation_pending';
+    if (effectiveAt && effectiveAt.getTime() > Date.now() + EFFECTIVE_DATE_BUFFER_MS) return 'cancellation_pending';
     return 'free';
   }
   return tier === 'free' ? 'free' : 'active';
