@@ -3,63 +3,54 @@ name: CI
 on: [push, pull_request]
 
 jobs:
-  test:
+  root-runtime:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
-    strategy:
-      matrix:
-        node-version: [18.x]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: ******127.0.0.1:5432/postgres
+      GITHUB_WEBHOOK_SECRET: integration-webhook-secret
+      STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Use Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '22'
+          cache: npm
 
       - name: Install system deps (psql)
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+        run: npm ci
 
       - name: Wait for Postgres
         env:
           PGPASSWORD: postgres
         run: |
-          until pg_isready -h localhost -p 5432 -U postgres -d postgres; do sleep 1; done
+          until pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres; do sleep 1; done
 
       - name: Run migrations
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
+        run: npm run migrate
 
-      - name: Set secrets for tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-        run: echo "secrets set"
+      - name: Run full root test suite
+        run: npm test
 
-      - name: Run tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          node tests/marketplace_webhook_handler.test.js
-          node tests/marketplace_webhook_handler.idempotency.test.js
-          node tests/webhook_signature.integration.test.js
+      - name: Run smoke verification
+        run: node tests/smoke.mjs

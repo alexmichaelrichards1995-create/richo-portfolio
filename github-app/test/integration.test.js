@@ -20,6 +20,16 @@ async function waitFor(url, timeoutMs = 10000) {
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+
+  async function waitForCondition(checkFn, timeoutMs = 12000) {
+    const started = Date.now();
+    while (Date.now() - started < timeoutMs) {
+      const value = await checkFn();
+      if (value) return value;
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    }
+    throw new Error('Timed out waiting for condition');
+  }
   throw new Error(`Timed out waiting for ${url}`);
 }
 
@@ -68,6 +78,14 @@ integration('Marketplace lifecycle and delivery idempotency persist correctly', 
 
   await waitFor(`${baseUrl}/health/live`);
 
+  let response = await fetch(`${baseUrl}/admin/jobs`);
+  assert.equal(response.status, 401);
+  response = await fetch(`${baseUrl}/admin/jobs`, { headers: { 'x-admin-token': 'integration-admin-token' } });
+  assert.equal(response.status, 200);
+  response = await fetch(`${baseUrl}/dashboard`);
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get('location'), '/auth/github');
+
   const basePurchase = {
     sender: { login: 'octocat' },
     marketplace_purchase: {
@@ -77,7 +95,7 @@ integration('Marketplace lifecycle and delivery idempotency persist correctly', 
     },
   };
 
-  let response = await sendWebhook(baseUrl, secret, 'delivery-purchase', 'marketplace_purchase', { ...basePurchase, action: 'purchased' });
+  response = await sendWebhook(baseUrl, secret, 'delivery-purchase', 'marketplace_purchase', { ...basePurchase, action: 'purchased' });
   assert.equal(response.status, 202);
   let body = await response.json();
   assert.equal(body.duplicate, false);
@@ -97,6 +115,14 @@ integration('Marketplace lifecycle and delivery idempotency persist correctly', 
   assert.equal(response.status, 202);
   subscription = (await db.query('SELECT tier,status,plan_name FROM subscriptions WHERE account_id=$1', [12345])).rows[0];
   assert.deepEqual(subscription, { tier: 'enterprise', status: 'active', plan_name: 'Enterprise' });
+
+  const cancellationPending = JSON.parse(JSON.stringify(changed));
+  cancellationPending.action = 'cancelled';
+  cancellationPending.marketplace_purchase.effective_date = new Date(Date.now() + 60_000).toISOString();
+  response = await sendWebhook(baseUrl, secret, 'delivery-cancel-pending', 'marketplace_purchase', cancellationPending);
+  assert.equal(response.status, 202);
+  subscription = (await db.query('SELECT tier,status,plan_name FROM subscriptions WHERE account_id=$1', [12345])).rows[0];
+  assert.deepEqual(subscription, { tier: 'enterprise', status: 'cancellation_pending', plan_name: 'Enterprise' });
 
   const cancelled = JSON.parse(JSON.stringify(changed));
   cancelled.action = 'cancelled';
@@ -119,5 +145,18 @@ integration('Marketplace lifecycle and delivery idempotency persist correctly', 
   assert.equal(response.status, 401);
 
   const deliveries = Number((await db.query('SELECT count(*)::int AS count FROM webhook_deliveries')).rows[0].count);
-  assert.equal(deliveries, 3);
+  assert.equal(deliveries, 4);
+
+  await db.query(
+    `INSERT INTO jobs(kind, payload, max_attempts, status, available_at)
+     VALUES('pr_check', $1::jsonb, 1, 'queued', now())`,
+    [JSON.stringify({ installationId: 99999, repo: 'owner/repo', sha: 'abc123', number: 1, action: 'opened' })]
+  );
+
+  const deadJob = await waitForCondition(async () => {
+    const row = (await db.query(`SELECT status, attempts FROM jobs WHERE kind='pr_check' ORDER BY id DESC LIMIT 1`)).rows[0];
+    return row && row.status === 'dead' ? row : null;
+  }, 15000);
+  assert.equal(deadJob.status, 'dead');
+  assert.equal(Number(deadJob.attempts), 1);
 });

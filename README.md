@@ -84,6 +84,30 @@ The runtime also links to the Richo Systems tools surface at `/tools`.
 - `.github/workflows/deploy-pages.yml` — CI/deployment workflow
 - `Dockerfile`, `vercel.json`, `netlify.toml` — alternate deployment targets
 
+## Architecture boundaries
+
+- Static portfolio/runtime UI stays at repository root (`index.html`, `app.js`, `styles.css`, `catalog.js`, static assets).
+- Root webhook + billing bridge files (`marketplace_webhook_handler.js`, `subscriptions_service.js`, `db/`) provide marketplace integration support for this runtime.
+- Full GitHub App/Marketplace SaaS backend is isolated in `github-app/`.
+- Shared subscription/tier model is centralized in `shared/subscription_model.js` to keep root and `github-app` entitlement lifecycle behavior aligned.
+
+## Operations runbook (core)
+
+- **Readiness checks**
+  - Root runtime: `npm run migrate && npm test && node tests/smoke.mjs`
+  - GitHub App core: `cd github-app && node scripts/migrate.js && npm test`
+- **Webhook incident triage**
+  1. Inspect webhook delivery records in `webhook_deliveries` for `status`, `error`, and timestamps.
+  2. Confirm `GITHUB_WEBHOOK_SECRET` and `DATABASE_URL` are configured.
+  3. Re-send failed deliveries from provider side only after root cause is corrected.
+- **Billing/subscription recovery**
+  1. Re-run migrations first.
+  2. Replay missing marketplace deliveries in original event order.
+  3. Validate resulting `subscriptions` rows (`tier`, `status`, `plan_name`, `effective_at`).
+- **Job replay (github-app)**
+  - Use `GET /admin/jobs` and `POST /admin/jobs/:id/replay` with `x-admin-token`.
+  - Replay only after dependency/auth failures are fixed.
+
 ## Completion standard
 
 A product should not be described as fully production-ready merely because it appears in the catalogue. The shared runtime currently gives all 53 products an executable readiness/control layer. Full product-specific software conversion requires each product to receive its own workflow logic, input/output model, persistence/export requirements where appropriate, acceptance tests, documentation and deployment verification.

@@ -2,6 +2,7 @@ const http = require('node:http');
 const crypto = require('node:crypto');
 const { URL } = require('node:url');
 const { Pool } = require('pg');
+const sharedSubscriptionModel = require('../../shared/subscription_model');
 
 const PORT = Number(process.env.PORT || 3000);
 const DATABASE_URL = process.env.DATABASE_URL || '';
@@ -85,23 +86,8 @@ async function getInstallationToken(installationId) {
   }).then((body) => body.token);
 }
 
-function planTier(planName = '') {
-  const name = String(planName).trim().toLowerCase();
-  if (name.includes('enterprise')) return 'enterprise';
-  if (name.includes('business')) return 'business';
-  if (name.includes('professional') || name === 'pro') return 'professional';
-  if (name.includes('starter')) return 'starter';
-  return 'free';
-}
-
-function featuresForTier(tier) {
-  const base = ['repository_health', 'basic_pr_checks'];
-  if (tier === 'starter') return [...base, 'basic_security'];
-  if (tier === 'professional') return [...base, 'basic_security', 'advanced_analytics', 'api_access', 'team_collaboration'];
-  if (tier === 'business') return [...base, 'basic_security', 'advanced_analytics', 'api_access', 'team_collaboration', 'policy_engine', 'priority_support'];
-  if (tier === 'enterprise') return [...base, 'basic_security', 'advanced_analytics', 'api_access', 'team_collaboration', 'policy_engine', 'priority_support', 'sso', 'audit_exports', 'custom_integrations'];
-  return base;
-}
+const planTier = sharedSubscriptionModel.planTier;
+const featuresForTier = sharedSubscriptionModel.featuresForTier;
 
 function makeSignedToken(payload, secret) {
   const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
@@ -160,12 +146,13 @@ async function processMarketplace(client, action, payload) {
   const plan = purchase.plan || {};
   if (!account.id) throw new Error('Marketplace payload is missing account.id');
 
-  const tier = planTier(plan.name);
-  const effectiveAt = purchase.effective_date ? new Date(purchase.effective_date) : new Date();
-  const isFuture = effectiveAt.getTime() > Date.now() + 1000;
+  const normalized = sharedSubscriptionModel.normalizeMarketplaceSubscription(action, purchase);
+  const tier = normalized.tier;
+  const effectiveAt = normalized.effectiveAt || new Date();
+  const status = normalized.status;
+  const planName = normalized.planName;
 
-  if (action === 'purchased' || action === 'changed') {
-    const status = tier === 'free' ? 'free' : 'active';
+  if (action === 'purchased' || action === 'changed' || action === 'cancelled') {
     await client.query(
       `INSERT INTO subscriptions(account_id, account_login, plan_id, plan_name, tier, status, effective_at, raw_plan, updated_at)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,now())
@@ -173,24 +160,8 @@ async function processMarketplace(client, action, payload) {
          account_login=EXCLUDED.account_login, plan_id=EXCLUDED.plan_id, plan_name=EXCLUDED.plan_name,
          tier=EXCLUDED.tier, status=EXCLUDED.status, effective_at=EXCLUDED.effective_at,
          raw_plan=EXCLUDED.raw_plan, updated_at=now()`,
-      [account.id, account.login || null, plan.id || null, plan.name || 'Free', tier, status, effectiveAt, plan]
+      [account.id, account.login || null, normalized.planId, planName, tier, status, effectiveAt, plan]
     );
-  } else if (action === 'cancelled') {
-    if (isFuture) {
-      await client.query(
-        `INSERT INTO subscriptions(account_id, account_login, plan_id, plan_name, tier, status, effective_at, raw_plan, updated_at)
-         VALUES($1,$2,$3,$4,$5,'cancellation_pending',$6,$7,now())
-         ON CONFLICT(account_id) DO UPDATE SET status='cancellation_pending', effective_at=$6, updated_at=now()`,
-        [account.id, account.login || null, plan.id || null, plan.name || 'Free', tier, effectiveAt, plan]
-      );
-    } else {
-      await client.query(
-        `INSERT INTO subscriptions(account_id, account_login, plan_name, tier, status, effective_at, raw_plan, updated_at)
-         VALUES($1,$2,'Free','free','free',$3,$4,now())
-         ON CONFLICT(account_id) DO UPDATE SET plan_name='Free', tier='free', status='free', effective_at=$3, raw_plan=$4, updated_at=now()`,
-        [account.id, account.login || null, effectiveAt, plan]
-      );
-    }
   } else {
     throw new Error(`Unsupported marketplace action: ${action}`);
   }
@@ -332,12 +303,12 @@ async function expirePendingCancellations() {
 }
 
 function json(res, status, body, headers = {}) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers });
   res.end(JSON.stringify(body));
 }
 
 function html(res, status, body, headers = {}) {
-  res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
+  res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers });
   res.end(body);
 }
 

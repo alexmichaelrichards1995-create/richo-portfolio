@@ -250,7 +250,7 @@ function updatePurchaseOutput(message) {
 }
 
 function getCheckoutLink(productId) {
-  const links = window.RICHO_STRIPE_LINKS || {};
+  const links = (typeof window !== 'undefined' && window.RICHO_STRIPE_LINKS) ? window.RICHO_STRIPE_LINKS : {};
   const value = links[productId];
   if (typeof value !== 'string') return '';
   const trimmed = value.trim();
@@ -262,7 +262,7 @@ function appendCheckoutEmail(checkoutUrl, email) {
   if (!checkoutUrl || !email) return checkoutUrl;
   try {
     const url = new URL(checkoutUrl);
-    url.searchParams.set('prefilled_email', email);
+    url.searchParams.set('prefilled_email', email.toLowerCase());
     return url.toString();
   } catch (error) {
     return checkoutUrl;
@@ -299,32 +299,42 @@ function copyPurchaseRequest() {
   });
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('[data-score]').forEach(button => button.addEventListener('click', () => scoreProduct(button.dataset.score)));
-  document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', () => copyResult(button.dataset.copy)));
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll('[data-score]').forEach(button => button.addEventListener('click', () => scoreProduct(button.dataset.score)));
+    document.querySelectorAll('[data-copy]').forEach(button => button.addEventListener('click', () => copyResult(button.dataset.copy)));
 
-  renderCatalog();
-  const search = document.getElementById('catalog-search');
-  if (search) search.addEventListener('input', () => renderCatalog(search.value));
-  const selector = document.getElementById('catalog-product');
-  if (selector) {
-    selector.addEventListener('change', () => selectCatalogProduct(selector.value));
-    if ((window.RICHO_CATALOG || []).length) selectCatalogProduct(window.RICHO_CATALOG[0].id);
-  }
-  document.getElementById('catalog-score')?.addEventListener('click', scoreCatalogProduct);
-  populatePurchaseProducts();
-  selector?.addEventListener('change', () => {
-    const purchase = document.getElementById('purchase-product');
-    if (purchase && [...purchase.options].some(option => option.value === selector.value)) {
-      purchase.value = selector.value;
+    renderCatalog();
+    const search = document.getElementById('catalog-search');
+    if (search) search.addEventListener('input', () => renderCatalog(search.value));
+    const selector = document.getElementById('catalog-product');
+    if (selector) {
+      selector.addEventListener('change', () => selectCatalogProduct(selector.value));
+      if ((window.RICHO_CATALOG || []).length) selectCatalogProduct(window.RICHO_CATALOG[0].id);
     }
-  });
-  document.getElementById('purchase-form')?.addEventListener('submit', (event) => {
-    event.preventDefault();
-    sendPurchaseRequest();
-  });
-  document.getElementById('purchase-copy')?.addEventListener('click', copyPurchaseRequest);
+    document.getElementById('catalog-score')?.addEventListener('click', scoreCatalogProduct);
+    populatePurchaseProducts();
+    selector?.addEventListener('change', () => {
+      const purchase = document.getElementById('purchase-product');
+      if (purchase && [...purchase.options].some(option => option.value === selector.value)) {
+        purchase.value = selector.value;
+      }
+    });
+    document.getElementById('purchase-form')?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      sendPurchaseRequest();
+    });
+    document.getElementById('purchase-copy')?.addEventListener('click', copyPurchaseRequest);
 
-  const year = document.getElementById('year');
-  if (year) year.textContent = new Date().getFullYear();
-});
+    const year = document.getElementById('year');
+    if (year) year.textContent = new Date().getFullYear();
+  });
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    readinessState,
+    getCheckoutLink,
+    appendCheckoutEmail,
+  };
+}

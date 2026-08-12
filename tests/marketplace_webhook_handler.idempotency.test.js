@@ -3,6 +3,11 @@
 
 (async () => {
   try {
+    process.env.GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || 'integration-webhook-secret';
+    if (!process.env.DATABASE_URL) {
+      throw new Error('DATABASE_URL is required for idempotency test');
+    }
+
     const { processMarketplaceEvent, clearHandledForTests } = require('../marketplace_webhook_handler');
     await clearHandledForTests();
 
@@ -10,8 +15,9 @@
       action: 'purchased',
       marketplace_purchase: {
         account: { login: 'acme', id: 9999, type: 'Organization' },
-        plan: { id: 1, name: 'Professional', monthly_price_in_cents: 2900 }
-      }
+        plan: { id: 1, name: 'Professional', monthly_price_in_cents: 2900 },
+        effective_date: new Date().toISOString(),
+      },
     };
 
     const deliveryId = 'test-delivery-123';

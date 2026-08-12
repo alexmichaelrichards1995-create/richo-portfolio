@@ -135,3 +135,15 @@ A periodic reconciler expires pending cancellations whose effective date has arr
 ## Current boundary
 
 This is a working service core, not a claim that the external GitHub App and paid Marketplace listing are already approved. A live end-to-end installation still requires a registered GitHub App, its generated credentials/private key, a public HTTPS deployment, PostgreSQL, and (for paid sales) GitHub Marketplace publisher/listing approval.
+
+## Architecture alignment
+
+- Entitlement tier mapping and feature sets are shared with the root runtime through `../shared/subscription_model.js`.
+- Keep subscription lifecycle semantics (`tier`, `status`, cancellation handling) aligned with this shared model for any new billing logic.
+
+## Incident and recovery runbook
+
+1. Confirm `/health/ready` fails only for known missing dependencies (DB, secrets, app credentials).
+2. Inspect `webhook_deliveries` for failed events and validate signature/headers before replay.
+3. Use `/admin/jobs` with `x-admin-token` to inspect and replay dead jobs after fixing root cause.
+4. For marketplace drift, replay deliveries in order and verify `subscriptions` status transitions (`active`, `cancellation_pending`, `free`).

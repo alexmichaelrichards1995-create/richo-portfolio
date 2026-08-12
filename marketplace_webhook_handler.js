@@ -1,178 +1,113 @@
 /* marketplace_webhook_handler.js
- * Express-compatible marketplace webhook handler for GitHub Marketplace purchase events.
+ * Express-compatible marketplace webhook handler.
  * - Verifies X-Hub-Signature-256 HMAC
- * - Idempotent processing using delivery GUID tracking (file-backed for scaffold)
- * - Exposes processMarketplaceEvent for unit testing
- *
- * Integrate: const {router} = require('./marketplace_webhook_handler'); app.use('/webhooks', router);
+ * - Durable idempotency via database webhook_deliveries table
  */
 
 const express = require('express');
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
 const router = express.Router();
+const subscriptionsService = require('./subscriptions_service');
+const dbClient = require('./db/db_client');
 
-// Load from env: GITHUB_WEBHOOK_SECRET
-const WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET || 'replace-me';
-const HANDLED_DIR = path.join(__dirname, 'data');
-const HANDLED_FILE = path.join(HANDLED_DIR, 'handled_deliveries.json');
+function log(level, message, detail = {}) {
+  process.stdout.write(`${JSON.stringify({ ts: new Date().toISOString(), level, message, ...detail })}\n`);
+}
 
-function verifySignature(req, res, buf, encoding) {
-  // express.json() body parser should be configured with this verify to retain raw body
-  if (!WEBHOOK_SECRET) return;
+function webhookSecret() {
+  const value = process.env.GITHUB_WEBHOOK_SECRET;
+  if (!value) {
+    const error = new Error('GITHUB_WEBHOOK_SECRET is required');
+    error.code = 'CONFIG_REQUIRED';
+    throw error;
+  }
+  return value;
+}
+
+function verifySignature(req, res, buf) {
   req.rawBody = buf;
 }
 
-// Middleware to verify signature header
 function requireValidSignature(req, res, next) {
-  const sig = req.get('x-hub-signature-256');
-  if (!sig || !req.rawBody) return res.status(400).send('Missing signature');
+  let secret;
+  try {
+    secret = webhookSecret();
+  } catch (error) {
+    return res.status(503).json({ error: error.message });
+  }
 
-  const hmac = crypto.createHmac('sha256', WEBHOOK_SECRET);
+  const sig = req.get('x-hub-signature-256');
+  if (!sig || !req.rawBody) return res.status(400).json({ error: 'Missing signature' });
+
+  const hmac = crypto.createHmac('sha256', secret);
   hmac.update(req.rawBody);
   const digest = `sha256=${hmac.digest('hex')}`;
 
-  // Constant-time compare
   try {
-    if (!crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(sig))) {
-      return res.status(401).send('Invalid signature');
+    const actual = Buffer.from(digest);
+    const provided = Buffer.from(sig);
+    if (actual.length !== provided.length || !crypto.timingSafeEqual(actual, provided)) {
+      return res.status(401).json({ error: 'Invalid signature' });
     }
   } catch (e) {
-    return res.status(401).send('Invalid signature');
+    return res.status(401).json({ error: 'Invalid signature' });
   }
+
   next();
 }
 
-// Ensure data dir exists
-async function ensureHandledStore() {
-  try {
-    await fs.promises.mkdir(HANDLED_DIR, { recursive: true });
-  } catch (e) {
-    // ignore
-  }
-  try {
-    await fs.promises.access(HANDLED_FILE);
-  } catch (e) {
-    await fs.promises.writeFile(HANDLED_FILE, JSON.stringify({}), 'utf8');
-  }
-}
-
-async function readHandled() {
-  await ensureHandledStore();
-  const raw = await fs.promises.readFile(HANDLED_FILE, 'utf8');
-  return JSON.parse(raw || '{}');
-}
-
-async function markHandled(deliveryId) {
-  const handled = await readHandled();
-  handled[deliveryId] = Date.now();
-  await fs.promises.writeFile(HANDLED_FILE, JSON.stringify(handled, null, 2), 'utf8');
-}
-
-async function clearHandledForTests() {
-  await ensureHandledStore();
-  await fs.promises.writeFile(HANDLED_FILE, JSON.stringify({}, null, 2), 'utf8');
-}
-
-// Core processing function exported for tests
 async function processMarketplaceEvent(event, deliveryId) {
   if (!deliveryId) throw new Error('missing deliveryId');
-  const handled = await readHandled();
-  if (handled[deliveryId]) {
-    return { skipped: true };
-  }
+  if (!event || !event.marketplace_purchase) throw new Error('no marketplace_purchase');
+  if (!dbClient.hasDatabase()) throw new Error('DATABASE_URL is required for marketplace webhook processing');
 
   const action = event.action;
   const purchase = event.marketplace_purchase;
-  if (!purchase) throw new Error('no marketplace_purchase');
-
   const account = purchase.account || {};
-  const plan = purchase.plan || {};
-  const accountId = account.id;
+  if (!account.id) throw new Error('marketplace account id is required');
 
-  // Dispatch
-  switch (action) {
-    case 'purchased':
-      await createOrUpgradeSubscription(accountId, plan.id, plan);
-      break;
-    case 'changed':
-      await updateSubscription(accountId, plan.id, plan);
-      break;
-    case 'cancelled':
-      await downgradeSubscription(accountId);
-      break;
-    default:
-      // ignore others
-      break;
-  }
+  return dbClient.withTransaction(async (client) => {
+    const firstSeen = await dbClient.reserveWebhookDelivery(client, deliveryId, 'marketplace_purchase', action, event);
+    if (!firstSeen) {
+      log('info', 'marketplace webhook duplicate', { delivery_id: deliveryId, action, account_id: account.id });
+      return { skipped: true };
+    }
 
-  // mark delivery handled (idempotency)
-  await markHandled(deliveryId);
-  return { processed: true };
+    try {
+      switch (action) {
+        case 'purchased':
+        case 'changed':
+        case 'cancelled':
+          await subscriptionsService.upsertSubscription(account.id, purchase, action, { client });
+          break;
+        default:
+          break;
+      }
+
+      await dbClient.markWebhookDeliveryProcessed(client, deliveryId);
+      log('info', 'marketplace webhook processed', { delivery_id: deliveryId, action, account_id: account.id });
+      return { processed: true };
+    } catch (error) {
+      await dbClient.markWebhookDeliveryFailed(client, deliveryId, error.message);
+      log('error', 'marketplace webhook failed', { delivery_id: deliveryId, action, account_id: account.id, error: error.message });
+      throw error;
+    }
+  });
 }
 
-// Main handler
+async function clearHandledForTests() {
+  await dbClient.clearWebhookDeliveriesForTests();
+}
+
 router.post('/marketplace', express.json({ verify: verifySignature }), requireValidSignature, async (req, res) => {
   try {
     const deliveryId = req.get('x-github-delivery');
-    // Fire-and-forget processing to respond quickly
-    processMarketplaceEvent(req.body, deliveryId).catch(err => console.error('async processing error', err));
-    res.status(200).send('ok');
+    const result = await processMarketplaceEvent(req.body, deliveryId);
+    res.status(202).json({ accepted: true, duplicate: Boolean(result && result.skipped) });
   } catch (err) {
-    console.error('marketplace webhook error', err);
-    res.status(500).send('server error');
+    log('error', 'marketplace webhook error', { error: err.message, delivery_id: req.get('x-github-delivery') || null });
+    res.status(500).json({ error: 'server error' });
   }
 });
-
-// -- Provisioning / billing stubs -- replace with DB/service calls and idempotency checks
-const subscriptionsService = require('./subscriptions_service');
-const stripeConnect = require('./stripe_connect');
-
-async function createOrUpgradeSubscription(accountId, planId, plan) {
-  console.log('createOrUpgradeSubscription', { accountId, planId, plan });
-  // Upsert subscription in DB
-  const result = await subscriptionsService.upsertSubscription(accountId, { id: planId, name: plan.name, monthly_price_in_cents: plan.monthly_price_in_cents, account_login: plan.account_login });
-
-  // Ensure a Stripe Connect account exists for enterprise (deferred for free tier)
-  try {
-    const org = { accountId, login: (plan.account_login || 'unknown') };
-    const connectRes = await stripeConnect.createConnectAccount(org).catch(e => { console.warn('stripe createConnectAccount failed', e && e.message); return null; });
-    if (connectRes && connectRes.accountId) {
-      // Persist connected account ID alongside subscription if using file store, best-effort
-      // Ideally subscriptionsService would handle mapping; here we log for visibility
-      console.log('Connected Stripe account', connectRes.accountId);
-    }
-  } catch (e) {
-    console.warn('createConnectAccount error', e && e.message);
-  }
-
-  return result;
-}
-
-async function updateSubscription(accountId, planId, plan) {
-  console.log('updateSubscription', { accountId, planId, plan });
-  // For now, reuse upsert to apply plan changes (idempotent). In future implement proration.
-  return subscriptionsService.upsertSubscription(accountId, { id: planId, name: plan.name, monthly_price_in_cents: plan.monthly_price_in_cents });
-}
-
-async function downgradeSubscription(accountId) {
-  console.log('downgradeSubscription', { accountId });
-  // Mark subscription as scheduled_downgrade
-  try {
-    const sub = await subscriptionsService.getSubscription(accountId);
-    if (sub && sub.account_id) {
-      // If using DB row, perform update via db client directly
-      const db = require('./db/db_client');
-      await db.upsertSubscription(accountId, { ...sub, status: 'scheduled_downgrade' });
-    } else if (sub && sub.accountId) {
-      // file-store shape
-      const db = require('./db/db_client');
-      await db.upsertSubscription(accountId, { ...sub, status: 'scheduled_downgrade' });
-    }
-  } catch (e) {
-    console.warn('downgradeSubscription error', e && e.message);
-  }
-}
 
 module.exports = { router, processMarketplaceEvent, clearHandledForTests };

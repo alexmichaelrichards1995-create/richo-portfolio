@@ -15,7 +15,64 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  core-verification:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: ******127.0.0.1:5432/postgres
+      GITHUB_WEBHOOK_SECRET: integration-webhook-secret
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install system deps (psql)
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Apply root migrations
+        run: npm run migrate
+
+      - name: Run root runtime tests
+        run: npm test
+
+      - name: Validate static runtime smoke gate
+        run: node tests/smoke.mjs
+
+      - name: Verify github-app core
+        working-directory: github-app
+        env:
+          DATABASE_URL: ******127.0.0.1:5432/postgres
+          DATABASE_SSL: 'false'
+          GITHUB_WEBHOOK_SECRET: integration-webhook-secret
+          SESSION_SECRET: integration-session-secret-32-characters-minimum
+          GITHUB_APP_ID: '123456'
+        run: |
+          npm install
+          node scripts/migrate.js
+          npm test
+
   deploy:
+    needs: core-verification
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -23,9 +80,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Run product smoke tests
-        run: node tests/smoke.mjs
 
       - name: Upload static site
         uses: actions/upload-pages-artifact@v5
