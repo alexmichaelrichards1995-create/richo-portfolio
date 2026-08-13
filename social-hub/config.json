@@ -1,0 +1,40 @@
+{
+  "sources": [
+    {
+      "id": "example-rss-1",
+      "provider": "rss",
+      "handle_or_url": "https://example.com/feed.xml",
+      "title": "Example Blog RSS",
+      "enabled": true,
+      "last_checked_at": null,
+      "last_success": null
+    },
+    {
+      "id": "example-twitter-1",
+      "provider": "twitter",
+      "handle_or_url": "@example_handle",
+      "title": "Example Twitter Account",
+      "enabled": false,
+      "last_checked_at": null,
+      "last_success": null
+    },
+    {
+      "id": "example-domain-1",
+      "provider": "domain",
+      "handle_or_url": "https://example.com",
+      "title": "Example Website",
+      "enabled": true,
+      "last_checked_at": null,
+      "last_success": null
+    },
+    {
+      "id": "c01a6518c413",
+      "provider": "rss",
+      "handle_or_url": "https://test.com/feed.xml",
+      "title": "Test Feed",
+      "enabled": true,
+      "last_checked_at": null,
+      "last_success": null
+    }
+  ]
+}
