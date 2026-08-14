@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 
+import { CheckoutButton } from '@/components/commerce/checkout-button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/server'
 
@@ -18,12 +19,15 @@ function formatMoney(amount: number, currency: string) {
 export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const supabase = await createClient()
-  const { data: product, error } = await supabase
-    .from('products')
-    .select('id, sku, slug, name, description, product_type, delivery_mode, price_amount, currency')
-    .eq('slug', slug)
-    .eq('status', 'active')
-    .maybeSingle()
+  const [{ data: product, error }, authResult] = await Promise.all([
+    supabase
+      .from('products')
+      .select('id, sku, slug, name, description, product_type, delivery_mode, price_amount, currency')
+      .eq('slug', slug)
+      .eq('status', 'active')
+      .maybeSingle(),
+    supabase.auth.getClaims(),
+  ])
 
   if (error) {
     return (
@@ -42,6 +46,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   }
 
   if (!product) notFound()
+
+  const claims = authResult.data?.claims
+  const authenticated = !authResult.error && claims && typeof claims.sub === 'string'
 
   return (
     <main className="min-h-svh bg-background px-4 py-10 text-foreground sm:px-6 lg:px-8">
@@ -73,14 +80,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <CardTitle className="text-4xl">{formatMoney(product.price_amount, product.currency)}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Link
-              href="/auth/login"
-              className="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-            >
-              Sign in to continue
-            </Link>
+            {authenticated ? (
+              <CheckoutButton productId={product.id} />
+            ) : (
+              <Link
+                href={`/auth/login?next=${encodeURIComponent(`/store/${product.slug}`)}`}
+                className="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                Sign in to purchase
+              </Link>
+            )}
             <p className="text-xs leading-5 text-muted-foreground">
-              Checkout is not enabled by this migration branch yet. Payment creation will remain server-side and will only be connected after the existing Stripe/marketplace work is reconciled with the new order schema.
+              Payment creation runs on the server and redirects to Stripe-hosted Checkout. This branch does not authorise production billing or deployment.
             </p>
           </CardContent>
         </Card>
