@@ -194,6 +194,27 @@ app.post('/api/config/import', (req, res) => {
   if (!incoming || !Array.isArray(incoming.sources)) {
     return res.status(400).json({ error: 'Request body must be a JSON object with a "sources" array' });
   }
+
+  const REQUIRED_FIELDS = ['id', 'provider', 'handle_or_url', 'title', 'enabled'];
+  const errors = [];
+  for (let i = 0; i < incoming.sources.length; i++) {
+    const s = incoming.sources[i];
+    for (const field of REQUIRED_FIELDS) {
+      if (!(field in s)) {
+        errors.push(`sources[${i}] missing required field: ${field}`);
+      }
+    }
+    if (!errors.length) {
+      const validationError = validateSource({ provider: s.provider, handle_or_url: s.handle_or_url });
+      if (validationError) {
+        errors.push(`sources[${i}]: ${validationError}`);
+      }
+    }
+  }
+  if (errors.length) {
+    return res.status(400).json({ error: 'Invalid sources in import', details: errors });
+  }
+
   saveConfig(incoming);
   res.json({ imported: incoming.sources.length });
 });

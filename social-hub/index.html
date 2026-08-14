@@ -125,16 +125,16 @@
       return;
     }
     tbody.innerHTML = sources.map((s) => `
-      <tr data-id="${s.id}">
-        <td><code style="font-size:.75rem">${s.id}</code></td>
-        <td>${s.provider}</td>
+      <tr data-id="${escHtml(s.id)}">
+        <td><code style="font-size:.75rem">${escHtml(s.id)}</code></td>
+        <td>${escHtml(s.provider)}</td>
         <td>${escHtml(s.title)}</td>
         <td style="word-break:break-all;max-width:200px">${escHtml(s.handle_or_url)}</td>
         <td><span class="badge ${s.enabled ? 'enabled' : 'disabled'}">${s.enabled ? 'enabled' : 'disabled'}</span></td>
         <td class="connection-status">${fmt(s.last_checked_at)}<br>${s.last_success ? '✅ ' + fmt(s.last_success) : ''}</td>
         <td>
-          <button class="btn btn-sm btn-toggle" onclick="toggleSource('${s.id}', ${!s.enabled})">${s.enabled ? 'Disable' : 'Enable'}</button>
-          <button class="btn btn-sm btn-danger" onclick="removeSource('${s.id}')">Remove</button>
+          <button class="btn btn-sm btn-toggle" data-action="toggle" data-id="${escHtml(s.id)}" data-enabled="${!s.enabled}">${s.enabled ? 'Disable' : 'Enable'}</button>
+          <button class="btn btn-sm btn-danger" data-action="remove" data-id="${escHtml(s.id)}">Remove</button>
         </td>
       </tr>`).join('');
   }
@@ -149,8 +149,8 @@
     renderSources(data.sources || []);
   }
 
-  window.toggleSource = async function (id, enabled) {
-    const res = await fetch(`/api/sources/${id}`, {
+  async function toggleSource(id, enabled) {
+    const res = await fetch(`/api/sources/${encodeURIComponent(id)}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
@@ -162,11 +162,11 @@
     } else {
       setMsg(data.error || 'Error', false);
     }
-  };
+  }
 
-  window.removeSource = async function (id) {
+  async function removeSource(id) {
     if (!confirm(`Remove source "${id}"?`)) return;
-    const res = await fetch(`/api/sources/${id}`, { method: 'DELETE' });
+    const res = await fetch(`/api/sources/${encodeURIComponent(id)}`, { method: 'DELETE' });
     const data = await res.json();
     if (res.ok) {
       setMsg(`Removed source ${id}.`);
@@ -174,7 +174,18 @@
     } else {
       setMsg(data.error || 'Error', false);
     }
-  };
+  }
+
+  tbody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (btn.dataset.action === 'toggle') {
+      toggleSource(id, btn.dataset.enabled === 'true');
+    } else if (btn.dataset.action === 'remove') {
+      removeSource(id);
+    }
+  });
 
   document.getElementById('add-form').addEventListener('submit', async (e) => {
     e.preventDefault();

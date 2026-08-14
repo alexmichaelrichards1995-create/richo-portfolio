@@ -26,15 +26,6 @@
       "enabled": true,
       "last_checked_at": null,
       "last_success": null
-    },
-    {
-      "id": "c01a6518c413",
-      "provider": "rss",
-      "handle_or_url": "https://test.com/feed.xml",
-      "title": "Test Feed",
-      "enabled": true,
-      "last_checked_at": null,
-      "last_success": null
     }
   ]
 }
