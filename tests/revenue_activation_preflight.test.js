@@ -18,9 +18,14 @@ const {
     assert.strictEqual(missing.environmentReady, false);
     assert.deepStrictEqual(missing.missing, ['STRIPE_WEBHOOK_SECRET']);
 
-    const schemaMissing = validateSchemaProbe({ payment_intents: 'payment_intents', paycore_kv: null });
+    const schemaMissing = validateSchemaProbe({
+      payment_intents: 'payment_intents',
+      payment_attempts: 'payment_attempts',
+      webhook_receipts: null,
+      paycore_kv: 'paycore_kv',
+    });
     assert.strictEqual(schemaMissing.schemaReady, false);
-    assert.deepStrictEqual(schemaMissing.missingTables, ['paycore_kv']);
+    assert.deepStrictEqual(schemaMissing.missingTables, ['webhook_receipts']);
 
     const readyEnv = {
       DATABASE_URL: 'postgres://example',
@@ -35,6 +40,8 @@ const {
         assert.strictEqual(connectionString, readyEnv.DATABASE_URL);
         return validateSchemaProbe({
           payment_intents: 'payment_intents',
+          payment_attempts: 'payment_attempts',
+          webhook_receipts: 'webhook_receipts',
           paycore_kv: 'paycore_kv',
         });
       },
