@@ -56,6 +56,7 @@ app.get(['/api/ready', '/ready'], async (req, res) => {
   if (!configured.database) missing.push('DATABASE_URL');
   if (!configured.stripeWebhook) missing.push('STRIPE_WEBHOOK_SECRET');
   if (!configured.posthog) missing.push('POSTHOG_PROJECT_TOKEN');
+  if (!configured.revenueSync) missing.push('REVENUE_SYNC_TOKEN');
 
   if (missing.length) {
     return res.status(503).json({
@@ -73,11 +74,30 @@ app.get(['/api/ready', '/ready'], async (req, res) => {
   });
 
   try {
-    await pool.query('SELECT 1 AS ok');
+    const result = await pool.query(`
+      SELECT
+        to_regclass('public.payment_intents') AS payment_intents,
+        to_regclass('public.paycore_kv') AS paycore_kv
+    `);
+    const row = result.rows[0] || {};
+    const missingTables = [];
+    if (!row.payment_intents) missingTables.push('payment_intents');
+    if (!row.paycore_kv) missingTables.push('paycore_kv');
+
+    if (missingTables.length) {
+      return res.status(503).json({
+        status: 'not_ready',
+        service: 'richo-revenue-webhook',
+        database: 'reachable',
+        missingTables,
+      });
+    }
+
     return res.status(200).json({
       status: 'ready',
       service: 'richo-revenue-webhook',
       database: 'reachable',
+      schema: 'compatible',
     });
   } catch (error) {
     console.error('revenue readiness database check failed', {
