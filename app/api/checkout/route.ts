@@ -43,11 +43,8 @@ export async function POST(request: NextRequest) {
   let canonicalOrigin: string
   try {
     canonicalOrigin = siteUrl(request)
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Checkout is not configured' },
-      { status: 503 },
-    )
+  } catch {
+    return NextResponse.json({ error: 'Checkout is not configured' }, { status: 503 })
   }
 
   if (!sameOriginAllowed(request, canonicalOrigin)) {
@@ -83,11 +80,8 @@ export async function POST(request: NextRequest) {
   try {
     admin = createAdminClient()
     stripe = getStripe()
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Billing is not configured' },
-      { status: 503 },
-    )
+  } catch {
+    return NextResponse.json({ error: 'Billing is not configured' }, { status: 503 })
   }
 
   const { data: product, error: productError } = await admin
@@ -108,7 +102,7 @@ export async function POST(request: NextRequest) {
   const subscriptionPriceId = metadataString(product.metadata, 'stripe_price_id')
   if (product.product_type === 'subscription' && !subscriptionPriceId) {
     return NextResponse.json(
-      { error: 'Subscription product is missing its server-configured Stripe price' },
+      { error: 'Subscription product is not configured for checkout' },
       { status: 409 },
     )
   }
@@ -238,9 +232,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ url: session.url })
   } catch (error) {
     await admin.from('orders').update({ status: 'failed' }).eq('id', order.id)
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unable to create Checkout Session' },
-      { status: 502 },
-    )
+    console.error('Stripe Checkout creation failed', {
+      orderId: order.id,
+      message: error instanceof Error ? error.message.slice(0, 500) : 'Unknown error',
+    })
+    return NextResponse.json({ error: 'Unable to create secure checkout' }, { status: 502 })
   }
 }
