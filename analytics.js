@@ -79,7 +79,9 @@
   });
 
   document.addEventListener('click', event => {
-    const link = event.target.closest('a');
+    const target = event.target;
+    const element = target instanceof Element ? target : target?.parentElement;
+    const link = element?.closest?.('a');
     if (!link) return;
 
     const isCommercialCta = link.matches('.button, .product-card a, nav a[href*="richosystems.technology"], footer a[href*="richosystems.technology"]');
