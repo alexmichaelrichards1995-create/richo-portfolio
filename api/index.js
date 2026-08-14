@@ -21,6 +21,7 @@ function configurationState() {
     posthog: Boolean(process.env.POSTHOG_PROJECT_TOKEN),
     posthogHost: process.env.POSTHOG_HOST ? 'configured' : 'default',
     revenueSync: Boolean(process.env.REVENUE_SYNC_TOKEN),
+    liveStripeAuthorized: process.env.ALLOW_LIVE_STRIPE === 'true',
   };
 }
 
@@ -42,7 +43,7 @@ app.get(['/api/health', '/health'], (req, res) => {
   noStore(res);
   return res.status(200).json({
     status: 'alive',
-    service: 'richo-revenue-webhook',
+    service: 'richo-paycore-revenue-intake',
     version: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'unknown',
     configured: configurationState(),
   });
@@ -61,7 +62,7 @@ app.get(['/api/ready', '/ready'], async (req, res) => {
   if (missing.length) {
     return res.status(503).json({
       status: 'not_ready',
-      service: 'richo-revenue-webhook',
+      service: 'richo-paycore-revenue-intake',
       missing,
     });
   }
@@ -77,17 +78,20 @@ app.get(['/api/ready', '/ready'], async (req, res) => {
     const result = await pool.query(`
       SELECT
         to_regclass('public.payment_intents') AS payment_intents,
+        to_regclass('public.payment_attempts') AS payment_attempts,
+        to_regclass('public.webhook_receipts') AS webhook_receipts,
         to_regclass('public.paycore_kv') AS paycore_kv
     `);
     const row = result.rows[0] || {};
     const missingTables = [];
-    if (!row.payment_intents) missingTables.push('payment_intents');
-    if (!row.paycore_kv) missingTables.push('paycore_kv');
+    for (const name of ['payment_intents', 'payment_attempts', 'webhook_receipts', 'paycore_kv']) {
+      if (!row[name]) missingTables.push(name);
+    }
 
     if (missingTables.length) {
       return res.status(503).json({
         status: 'not_ready',
-        service: 'richo-revenue-webhook',
+        service: 'richo-paycore-revenue-intake',
         database: 'reachable',
         missingTables,
       });
@@ -95,17 +99,18 @@ app.get(['/api/ready', '/ready'], async (req, res) => {
 
     return res.status(200).json({
       status: 'ready',
-      service: 'richo-revenue-webhook',
+      service: 'richo-paycore-revenue-intake',
       database: 'reachable',
-      schema: 'compatible',
+      schema: 'paycore-compatible',
+      liveStripeAuthorized: configured.liveStripeAuthorized,
     });
   } catch (error) {
-    console.error('revenue readiness database check failed', {
+    console.error('PayCore readiness database check failed', {
       message: error && error.message,
     });
     return res.status(503).json({
       status: 'not_ready',
-      service: 'richo-revenue-webhook',
+      service: 'richo-paycore-revenue-intake',
       database: 'unreachable',
     });
   } finally {
@@ -125,11 +130,11 @@ app.post('/api/revenue-sync', async (req, res) => {
   try {
     const result = await syncPayCoreRevenueFromEnvironment({
       limit,
-      onError: error => console.error('paycore revenue analytics delivery failed', { message: error && error.message }),
+      onError: error => console.error('PayCore revenue analytics delivery failed', { message: error && error.message }),
     });
     return res.status(result.failed ? 207 : 200).json({ status: 'complete', ...result });
   } catch (error) {
-    console.error('paycore revenue sync failed', { message: error && error.message });
+    console.error('PayCore revenue sync failed', { message: error && error.message });
     return res.status(503).json({ error: 'revenue_sync_unavailable' });
   }
 });
