@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const requiredFiles = ['index.html', 'styles.css', 'catalog.js', 'app.js', 'assets/logo.svg'];
+const requiredFiles = ['index.html', 'styles.css', 'catalog.js', 'analytics.js', 'app.js', 'assets/logo.svg'];
 const failures = [];
 
 for (const file of requiredFiles) {
@@ -17,7 +17,9 @@ if (fs.existsSync('index.html')) {
     'id="pilot-tool"',
     'id="diligence-tool"',
     'script src="catalog.js"',
+    'script src="analytics.js"',
     'script src="app.js"',
+    'anonymous usage events',
     'https://richosystems.technology/'
   ];
   for (const token of requiredTokens) {
@@ -40,13 +42,39 @@ if (fs.existsSync('catalog.js')) {
   }
 }
 
+if (fs.existsSync('analytics.js')) {
+  const analytics = fs.readFileSync('analytics.js', 'utf8');
+  for (const token of [
+    'richo_cta_clicked',
+    'richo_checkout_started',
+    "person_profiles: 'identified_only'",
+    'autocapture: false',
+    'disable_session_recording: true',
+    'respect_dnt: true'
+  ]) {
+    if (!analytics.includes(token)) failures.push(`analytics.js missing telemetry control: ${token}`);
+  }
+
+  for (const forbidden of ['checkbox_value', 'evidence_gap_text', 'readiness_score']) {
+    if (analytics.includes(forbidden)) failures.push(`analytics.js contains forbidden assessment telemetry token: ${forbidden}`);
+  }
+}
+
 if (fs.existsSync('app.js')) {
   const js = fs.readFileSync('app.js', 'utf8');
   for (const key of ['governance', 'pilot', 'diligence']) {
     if (!js.includes(`${key}:`)) failures.push(`app.js missing flagship engine: ${key}`);
   }
-  for (const token of ['scoreProduct','renderCatalog','scoreCatalogProduct','familyChecks']) {
-    if (!js.includes(token)) failures.push(`app.js missing runtime function: ${token}`);
+  for (const token of [
+    'scoreProduct',
+    'renderCatalog',
+    'scoreCatalogProduct',
+    'familyChecks',
+    'richo_readiness_completed',
+    'richo_catalog_product_selected',
+    'richo_catalog_readiness_completed'
+  ]) {
+    if (!js.includes(token)) failures.push(`app.js missing runtime or analytics function: ${token}`);
   }
   const familyCount = (js.match(/': \[/g) || []).length;
   if (familyCount < 6) failures.push('Expected at least 6 family readiness engines');
@@ -59,4 +87,4 @@ if (failures.length) {
 }
 
 console.log('R.I.C.H.O. smoke test PASSED');
-console.log('Verified 5 required files, 53 RSP catalogue entries, family gates and 3 flagship engines.');
+console.log('Verified 6 required files, 53 RSP catalogue entries, family gates, 3 flagship engines and privacy-safe analytics controls.');
