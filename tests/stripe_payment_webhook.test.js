@@ -1,10 +1,9 @@
 const assert = require('assert');
 const Stripe = require('stripe');
 const {
-  normalizeVerifiedPurchase,
+  normalizePayCoreSuccess,
   processStripePaymentEvent,
   constructStripeEvent,
-  stableUuid,
 } = require('../stripe_payment_webhook');
 
 function event(overrides = {}) {
@@ -20,105 +19,61 @@ function event(overrides = {}) {
         amount_total: overrides.amountTotal === undefined ? 19900 : overrides.amountTotal,
         currency: overrides.currency || 'aud',
         payment_intent: overrides.paymentIntent || 'pi_test_1',
-        customer: overrides.customer || 'cus_test_1',
-        subscription: overrides.subscription || null,
-        client_reference_id: overrides.clientReferenceId || null,
-        metadata: overrides.metadata || { product_name: 'AI Business Upgrade' },
+        metadata: overrides.metadata || {
+          paycore_intent_id: 'paycore_intent_1',
+          product_name: 'AI Business Upgrade',
+        },
       },
     },
-  };
-}
-
-function memoryStore() {
-  const rows = new Map();
-  return {
-    async upsertVerifiedPurchase(purchase) {
-      const existing = rows.get(purchase.checkoutSessionId);
-      if (existing) return existing;
-      const row = { ...purchase, analytics_sent_at: null, analytics_attempts: 0 };
-      rows.set(purchase.checkoutSessionId, row);
-      return row;
-    },
-    async markAnalyticsAttempt(id, sent) {
-      const row = rows.get(id);
-      if (!row) throw new Error('missing row');
-      row.analytics_attempts += 1;
-      if (sent && !row.analytics_sent_at) row.analytics_sent_at = new Date().toISOString();
-      return row;
-    },
-    rows,
   };
 }
 
 (async () => {
-  const normalized = normalizeVerifiedPurchase(event({
-    clientReferenceId: 'ph-user-123',
-    amountTotal: 19900,
-  }));
+  delete process.env.ALLOW_LIVE_STRIPE;
+
+  const normalized = normalizePayCoreSuccess(event());
   assert.equal(normalized.accepted, true);
-  assert.equal(normalized.purchase.amountMinor, 19900);
-  assert.equal(normalized.purchase.currency, 'AUD');
-  assert.equal(normalized.purchase.posthogDistinctId, 'ph-user-123');
-  assert.equal(normalized.purchase.attributionQuality, 'client_reference_id');
-
-  const unpaid = normalizeVerifiedPurchase(event({ paymentStatus: 'unpaid' }));
-  assert.equal(unpaid.accepted, false);
-  assert.equal(unpaid.reason, 'payment_not_paid');
-
-  const zero = normalizeVerifiedPurchase(event({ amountTotal: 0 }));
-  assert.equal(zero.accepted, false);
-  assert.equal(zero.reason, 'no_positive_cleared_revenue');
-
-  const store = memoryStore();
-  const captures = [];
-  const paidEvent = event({ sessionId: 'cs_paid_once', id: 'evt_paid_once' });
-
-  const first = await processStripePaymentEvent(paidEvent, {
-    store,
-    capture: async payload => captures.push(payload),
+  assert.deepStrictEqual(normalized.payment, {
+    stripeEventId: 'evt_test_1',
+    eventType: 'checkout.session.completed',
+    checkoutSessionId: 'cs_test_1',
+    paymentIntentId: 'pi_test_1',
+    paycoreIntentId: 'paycore_intent_1',
+    amountMinor: 19900,
+    currency: 'AUD',
+    paymentStatus: 'paid',
+    livemode: false,
+    paidAt: '2026-08-15T00:00:00.000Z',
   });
-  assert.equal(first.status, 'recorded');
-  assert.equal(captures.length, 1);
-  assert.equal(captures[0].event, 'richo_purchase_completed');
-  assert.equal(captures[0].properties.revenue, 19900);
-  assert.equal(captures[0].properties.currency, 'AUD');
-  assert.equal(captures[0].uuid, stableUuid('richo_purchase_completed:cs_paid_once'));
 
-  const duplicate = await processStripePaymentEvent(paidEvent, {
-    store,
-    capture: async payload => captures.push(payload),
-  });
-  assert.equal(duplicate.status, 'duplicate');
-  assert.equal(captures.length, 1, 'duplicate Stripe delivery must not create duplicate revenue capture');
+  assert.deepStrictEqual(
+    normalizePayCoreSuccess(event({ paymentStatus: 'unpaid' })),
+    { accepted: false, reason: 'payment_not_paid' },
+  );
+  assert.deepStrictEqual(
+    normalizePayCoreSuccess(event({ amountTotal: 0 })),
+    { accepted: false, reason: 'no_positive_cleared_revenue' },
+  );
+  assert.deepStrictEqual(
+    normalizePayCoreSuccess(event({ livemode: true })),
+    { accepted: false, reason: 'live_mode_not_authorized' },
+  );
 
-  const retryStore = memoryStore();
-  let attempts = 0;
-  const retryEvent = event({ sessionId: 'cs_retry', id: 'evt_retry' });
-  try {
-    await processStripePaymentEvent(retryEvent, {
-      store: retryStore,
-      capture: async () => {
-        attempts += 1;
-        throw new Error('temporary analytics outage');
-      },
-    });
-    assert.fail('expected analytics failure');
-  } catch (error) {
-    assert.equal(error.message, 'temporary analytics outage');
-  }
-  assert.equal(retryStore.rows.get('cs_retry').analytics_sent_at, null);
-
-  const retryCaptures = [];
-  const recovered = await processStripePaymentEvent(retryEvent, {
-    store: retryStore,
-    capture: async payload => {
-      attempts += 1;
-      retryCaptures.push(payload);
+  let persisted = null;
+  const recorded = await processStripePaymentEvent(event(), {
+    persist: async payment => {
+      persisted = payment;
+      return { status: 'recorded', intentId: payment.paycoreIntentId };
     },
   });
-  assert.equal(recovered.status, 'recorded');
-  assert.equal(retryCaptures.length, 1);
-  assert.equal(attempts, 2);
+  assert.equal(recorded.status, 'recorded');
+  assert.equal(recorded.intentId, 'paycore_intent_1');
+  assert.equal(persisted.checkoutSessionId, 'cs_test_1');
+
+  const ignored = await processStripePaymentEvent(event({ type: 'checkout.session.expired' }), {
+    persist: async () => { throw new Error('must not persist ignored event'); },
+  });
+  assert.deepStrictEqual(ignored, { status: 'ignored', reason: 'event_not_revenue_success' });
 
   const StripeClient = Stripe('sk_test_placeholder');
   const secret = 'whsec_test_secret';
@@ -127,13 +82,13 @@ function memoryStore() {
   const parsed = constructStripeEvent(Buffer.from(raw), signature, secret, StripeClient);
   assert.equal(parsed.data.object.id, 'cs_signed');
 
-  const asyncPaid = normalizeVerifiedPurchase(event({
+  const asyncPaid = normalizePayCoreSuccess(event({
     type: 'checkout.session.async_payment_succeeded',
     sessionId: 'cs_async_paid',
   }));
   assert.equal(asyncPaid.accepted, true);
 
-  console.log('OK: verified Stripe revenue webhook is paid-only, signed, retry-safe and idempotent');
+  console.log('OK: Stripe webhook is signed, paid-only, test-mode default, and PayCore-only');
 })().catch(error => {
   console.error('FAILED', error);
   process.exit(1);
