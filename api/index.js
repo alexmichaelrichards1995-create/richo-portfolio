@@ -1,8 +1,10 @@
 'use strict';
 
+const crypto = require('crypto');
 const express = require('express');
 const { Pool } = require('pg');
 const { router: stripePaymentRouter } = require('../stripe_payment_webhook');
+const { syncPayCoreRevenueFromEnvironment } = require('../paycore_revenue_bridge');
 
 const app = express();
 app.disable('x-powered-by');
@@ -18,7 +20,17 @@ function configurationState() {
     stripeWebhook: Boolean(process.env.STRIPE_WEBHOOK_SECRET),
     posthog: Boolean(process.env.POSTHOG_PROJECT_TOKEN),
     posthogHost: process.env.POSTHOG_HOST ? 'configured' : 'default',
+    revenueSync: Boolean(process.env.REVENUE_SYNC_TOKEN),
   };
+}
+
+function bearerMatches(request, expectedToken) {
+  if (!expectedToken) return false;
+  const header = String(request.headers.authorization || '');
+  if (!header.startsWith('Bearer ')) return false;
+  const supplied = Buffer.from(header.slice(7));
+  const expected = Buffer.from(String(expectedToken));
+  return supplied.length === expected.length && crypto.timingSafeEqual(supplied, expected);
 }
 
 // IMPORTANT: Mount the Stripe router before any JSON/body parser. The router
@@ -78,6 +90,27 @@ app.get(['/api/ready', '/ready'], async (req, res) => {
     });
   } finally {
     await pool.end().catch(() => {});
+  }
+});
+
+app.post('/api/revenue-sync', async (req, res) => {
+  noStore(res);
+  const syncToken = process.env.REVENUE_SYNC_TOKEN;
+  if (!syncToken) return res.status(503).json({ error: 'revenue_sync_disabled' });
+  if (!bearerMatches(req, syncToken)) return res.status(401).json({ error: 'unauthorized' });
+
+  const requestedLimit = Number(req.query.limit || 100);
+  const limit = Number.isFinite(requestedLimit) ? Math.max(1, Math.min(Math.floor(requestedLimit), 100)) : 100;
+
+  try {
+    const result = await syncPayCoreRevenueFromEnvironment({
+      limit,
+      onError: error => console.error('paycore revenue analytics delivery failed', { message: error && error.message }),
+    });
+    return res.status(result.failed ? 207 : 200).json({ status: 'complete', ...result });
+  } catch (error) {
+    console.error('paycore revenue sync failed', { message: error && error.message });
+    return res.status(503).json({ error: 'revenue_sync_unavailable' });
   }
 });
 
