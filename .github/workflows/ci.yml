@@ -55,9 +55,9 @@ jobs:
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
           done
 
-      - name: Run complete test suite
+      - name: Run complete hermetic test suite
         env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          GITHUB_WEBHOOK_SECRET: richo-ci-webhook-test-secret
+          STRIPE_API_KEY: ""
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
         run: npm test
