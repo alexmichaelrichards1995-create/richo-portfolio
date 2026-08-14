@@ -170,7 +170,7 @@ export type Database = {
           {
             foreignKeyName: "entitlements_order_item_id_fkey"
             columns: ["order_item_id"]
-            isOneToOne: false
+            isOneToOne: true
             referencedRelation: "order_items"
             referencedColumns: ["id"]
           },
@@ -291,6 +291,42 @@ export type Database = {
           total_amount?: number
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      payment_events: {
+        Row: {
+          entity_id: string | null
+          error_message: string | null
+          event_type: string
+          id: string
+          metadata: Json
+          processed_at: string | null
+          provider: string
+          received_at: string
+          status: string
+        }
+        Insert: {
+          entity_id?: string | null
+          error_message?: string | null
+          event_type: string
+          id: string
+          metadata?: Json
+          processed_at?: string | null
+          provider: string
+          received_at?: string
+          status?: string
+        }
+        Update: {
+          entity_id?: string | null
+          error_message?: string | null
+          event_type?: string
+          id?: string
+          metadata?: Json
+          processed_at?: string | null
+          provider?: string
+          received_at?: string
+          status?: string
         }
         Relationships: []
       }
