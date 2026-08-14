@@ -11,31 +11,36 @@ const { Client } = require('pg');
     const res = await c.query(`
       SELECT
         to_regclass('public.subscriptions') AS subscriptions,
-        to_regclass('public.verified_purchases') AS verified_purchases
+        to_regclass('public.payment_intents') AS payment_intents,
+        to_regclass('public.payment_attempts') AS payment_attempts,
+        to_regclass('public.webhook_receipts') AS webhook_receipts,
+        to_regclass('public.paycore_kv') AS paycore_kv
     `);
 
-    if (!res.rows[0].subscriptions) throw new Error('subscriptions table not found');
-    if (!res.rows[0].verified_purchases) throw new Error('verified_purchases table not found');
-
-    const columns = await c.query(`
-      SELECT column_name
-      FROM information_schema.columns
-      WHERE table_schema = 'public'
-        AND table_name = 'verified_purchases'
-    `);
-    const names = new Set(columns.rows.map(row => row.column_name));
     for (const required of [
-      'checkout_session_id',
-      'amount_minor',
-      'currency',
-      'analytics_event_uuid',
-      'analytics_sent_at',
-      'analytics_attempts',
+      'subscriptions',
+      'payment_intents',
+      'payment_attempts',
+      'webhook_receipts',
+      'paycore_kv',
     ]) {
-      if (!names.has(required)) throw new Error(`verified_purchases missing column: ${required}`);
+      if (!res.rows[0][required]) throw new Error(`${required} table not found`);
     }
 
-    console.log('OK: subscriptions and verified purchase revenue ledger migrations are present');
+    const receiptPk = await c.query(`
+      SELECT pg_get_constraintdef(con.oid) AS definition
+      FROM pg_constraint con
+      JOIN pg_class rel ON rel.oid = con.conrelid
+      JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+      WHERE nsp.nspname = 'public'
+        AND rel.relname = 'webhook_receipts'
+        AND con.contype = 'p'
+    `);
+    if (!receiptPk.rowCount || !/provider, event_id/.test(receiptPk.rows[0].definition)) {
+      throw new Error('webhook_receipts must deduplicate by provider + event_id');
+    }
+
+    console.log('OK: subscriptions and authoritative PayCore revenue schema are present');
     process.exit(0);
   } catch (err) {
     console.error('FAILED', err && err.message);
