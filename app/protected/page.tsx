@@ -61,7 +61,7 @@ export default async function ProtectedPage() {
       .order('created_at', { ascending: false })
       .limit(8),
     supabase
-      .from('subscriptions')
+      .from('customer_subscriptions')
       .select('id, status, payment_provider, current_period_end, cancel_at_period_end')
       .order('created_at', { ascending: false })
       .limit(6),
