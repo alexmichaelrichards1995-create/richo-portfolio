@@ -42,7 +42,7 @@ integration('Marketplace lifecycle and delivery idempotency persist correctly', 
   const baseUrl = `http://127.0.0.1:${port}`;
   const secret = 'integration-webhook-secret';
   const db = new Pool({ connectionString: DATABASE_URL });
-  await db.query('TRUNCATE webhook_deliveries, jobs, audit_log, subscriptions, installations, github_users RESTART IDENTITY CASCADE');
+  await db.query('TRUNCATE webhook_deliveries, jobs, audit_log, marketplace_subscriptions, installations, github_users RESTART IDENTITY CASCADE');
 
   const child = spawn(process.execPath, ['src/server.js'], {
     cwd: process.cwd(),
@@ -87,7 +87,7 @@ integration('Marketplace lifecycle and delivery idempotency persist correctly', 
   body = await response.json();
   assert.equal(body.duplicate, true);
 
-  let subscription = (await db.query('SELECT tier,status,plan_name FROM subscriptions WHERE account_id=$1', [12345])).rows[0];
+  let subscription = (await db.query('SELECT tier,status,plan_name FROM marketplace_subscriptions WHERE account_id=$1', [12345])).rows[0];
   assert.deepEqual(subscription, { tier: 'professional', status: 'active', plan_name: 'Professional' });
 
   const changed = JSON.parse(JSON.stringify(basePurchase));
@@ -95,7 +95,7 @@ integration('Marketplace lifecycle and delivery idempotency persist correctly', 
   changed.marketplace_purchase.plan = { id: 789, name: 'Enterprise', monthly_price_in_cents: 50000 };
   response = await sendWebhook(baseUrl, secret, 'delivery-change', 'marketplace_purchase', changed);
   assert.equal(response.status, 202);
-  subscription = (await db.query('SELECT tier,status,plan_name FROM subscriptions WHERE account_id=$1', [12345])).rows[0];
+  subscription = (await db.query('SELECT tier,status,plan_name FROM marketplace_subscriptions WHERE account_id=$1', [12345])).rows[0];
   assert.deepEqual(subscription, { tier: 'enterprise', status: 'active', plan_name: 'Enterprise' });
 
   const cancelled = JSON.parse(JSON.stringify(changed));
@@ -103,7 +103,7 @@ integration('Marketplace lifecycle and delivery idempotency persist correctly', 
   cancelled.marketplace_purchase.effective_date = new Date(Date.now() - 1000).toISOString();
   response = await sendWebhook(baseUrl, secret, 'delivery-cancel', 'marketplace_purchase', cancelled);
   assert.equal(response.status, 202);
-  subscription = (await db.query('SELECT tier,status,plan_name FROM subscriptions WHERE account_id=$1', [12345])).rows[0];
+  subscription = (await db.query('SELECT tier,status,plan_name FROM marketplace_subscriptions WHERE account_id=$1', [12345])).rows[0];
   assert.deepEqual(subscription, { tier: 'free', status: 'free', plan_name: 'Free' });
 
   const badRaw = Buffer.from('{}');
