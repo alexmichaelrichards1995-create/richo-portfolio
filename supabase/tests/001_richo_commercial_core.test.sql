@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(32);
+select plan(34);
 
 -- Core relations exist.
 select has_table('public', 'profiles', 'profiles exists');
@@ -86,6 +86,28 @@ select policies_are(
   'audit_events',
   array[]::text[],
   'audit_events intentionally has no client policy'
+);
+
+-- Checkout/webhook idempotency constraints must be structural, not application-only.
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conname = 'orders_checkout_reference_unique'
+      and contype = 'u'
+      and conrelid = 'public.orders'::regclass
+  ),
+  'checkout session reference is unique per order'
+);
+select ok(
+  exists (
+    select 1
+    from pg_constraint
+    where conname = 'entitlements_order_item_unique'
+      and contype = 'u'
+      and conrelid = 'public.entitlements'::regclass
+  ),
+  'each order item can grant at most one entitlement'
 );
 
 -- Privilege boundaries: public catalog read, owner-only commercial reads,
