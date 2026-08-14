@@ -10,11 +10,13 @@ Verified revenue is emitted only from a Stripe-signed Checkout success event aft
 
 ### Revenue API
 
-The Vercel serverless entrypoint is `api/index.js`.
+The repository's Vercel serverless entrypoint is `api/index.js`.
 
 - `GET /api/health` — liveness plus non-secret configuration flags.
 - `GET /api/ready` — readiness gate; requires database, Stripe webhook secret and PostHog project token, and verifies the database is reachable.
 - `POST /api/stripe` — signed Stripe Checkout webhook. The Stripe router is mounted before any JSON/body parser so `express.raw()` receives the exact request bytes required for signature verification.
+
+A separate existing Vercel payment-intake deployment may expose its Stripe callback as `/api/stripe/webhook`; do not register Stripe against either route until the chosen production deployment is public, its readiness gate passes, and the matching webhook signing secret is installed in that deployment. Run only one authoritative production purchase receiver to avoid split receipts.
 
 Production activation requires Vercel environment variables:
 
@@ -50,4 +52,4 @@ CI applies all SQL migrations and tests:
 - delayed-payment success handling
 - Vercel revenue API health/routing contract
 
-Production is not considered activated until a deployed `/api/ready` returns `ready`, Stripe has a webhook endpoint registered to the public `/api/stripe` route, and a signed test event is accepted and persisted.
+Production is not considered activated until a single deployed readiness endpoint passes, Stripe has one authoritative webhook endpoint registered to the corresponding public callback route, and a signed paid test event is accepted and persisted.
