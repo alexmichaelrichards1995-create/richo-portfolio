@@ -105,8 +105,8 @@ function apiRateLimit(req, res, next) {
   next();
 }
 
-// Serve static admin UI
-app.get('/', (_req, res) => {
+// Serve static admin UI (rate-limited to prevent excessive file system reads)
+app.get('/', apiRateLimit, (_req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
 
