@@ -67,6 +67,65 @@ export type Database = {
         }
         Relationships: []
       }
+      customer_subscriptions: {
+        Row: {
+          cancel_at_period_end: boolean
+          created_at: string
+          current_period_end: string | null
+          current_period_start: string | null
+          ended_at: string | null
+          id: string
+          metadata: Json
+          payment_provider: string
+          product_id: string | null
+          provider_customer_id: string | null
+          provider_subscription_id: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          ended_at?: string | null
+          id?: string
+          metadata?: Json
+          payment_provider: string
+          product_id?: string | null
+          provider_customer_id?: string | null
+          provider_subscription_id: string
+          status: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          created_at?: string
+          current_period_end?: string | null
+          current_period_start?: string | null
+          ended_at?: string | null
+          id?: string
+          metadata?: Json
+          payment_provider?: string
+          product_id?: string | null
+          provider_customer_id?: string | null
+          provider_subscription_id?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_subscriptions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       entitlements: {
         Row: {
           created_at: string
@@ -315,65 +374,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
-      }
-      subscriptions: {
-        Row: {
-          cancel_at_period_end: boolean
-          created_at: string
-          current_period_end: string | null
-          current_period_start: string | null
-          ended_at: string | null
-          id: string
-          metadata: Json
-          payment_provider: string
-          product_id: string | null
-          provider_customer_id: string | null
-          provider_subscription_id: string
-          status: string
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          cancel_at_period_end?: boolean
-          created_at?: string
-          current_period_end?: string | null
-          current_period_start?: string | null
-          ended_at?: string | null
-          id?: string
-          metadata?: Json
-          payment_provider: string
-          product_id?: string | null
-          provider_customer_id?: string | null
-          provider_subscription_id: string
-          status: string
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          cancel_at_period_end?: boolean
-          created_at?: string
-          current_period_end?: string | null
-          current_period_start?: string | null
-          ended_at?: string | null
-          id?: string
-          metadata?: Json
-          payment_provider?: string
-          product_id?: string | null
-          provider_customer_id?: string | null
-          provider_subscription_id?: string
-          status?: string
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "subscriptions_product_id_fkey"
-            columns: ["product_id"]
-            isOneToOne: false
-            referencedRelation: "products"
-            referencedColumns: ["id"]
-          },
-        ]
       }
     }
     Views: {
