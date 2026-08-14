@@ -25,6 +25,9 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
+      - name: Run product and analytics smoke gate
+        run: node tests/smoke.mjs
+
       - name: Install system deps (psql)
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
