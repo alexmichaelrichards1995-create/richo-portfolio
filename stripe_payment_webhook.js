@@ -107,6 +107,11 @@ router.post('/stripe/webhook', express.raw({ type: 'application/json' }), async 
   }
 });
 
+router.all('/stripe/webhook', (req, res) => {
+  res.set('Allow', 'POST');
+  return res.status(405).json({ error: 'method_not_allowed' });
+});
+
 module.exports = {
   router,
   normalizePayCoreSuccess,
