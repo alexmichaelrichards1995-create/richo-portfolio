@@ -42,10 +42,14 @@ jobs:
         run: |
           until pg_isready -h localhost -p 5432 -U postgres -d postgres; do sleep 1; done
 
-      - name: Run migrations
+      - name: Run all legacy Marketplace migrations
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
+        run: |
+          for migration in migrations/*.sql; do
+            echo "Applying $migration"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
 
       - name: Run full test suite without production credentials
         env:
@@ -55,6 +59,15 @@ jobs:
 
   github-app-tests:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: github_app
+        ports:
+          - 5433:5432
     defaults:
       run:
         working-directory: github-app
@@ -66,6 +79,9 @@ jobs:
         with:
           node-version: 22.x
 
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Install GitHub App dependencies
         run: |
           if [ -f package-lock.json ]; then
@@ -74,7 +90,23 @@ jobs:
             npm install
           fi
 
-      - name: Run GitHub App core and integration tests
+      - name: Wait for GitHub App Postgres
+        env:
+          PGPASSWORD: postgres
+        run: |
+          until pg_isready -h localhost -p 5433 -U postgres -d github_app; do sleep 1; done
+
+      - name: Apply GitHub App SQL migrations
+        env:
+          DATABASE_URL: postgres://postgres:postgres@localhost:5433/github_app
+        run: |
+          for migration in sql/*.sql; do
+            echo "Applying $migration"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
+
+      - name: Run GitHub App core and database integration tests
         env:
           NODE_ENV: test
+          DATABASE_URL: postgres://postgres:postgres@localhost:5433/github_app
         run: npm test
