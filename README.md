@@ -1,79 +1,55 @@
-# R.I.C.H.O. Product Runtime Hub
+# R.I.C.H.O. Portfolio / Commercial Systems
 
-![CI](https://github.com/alexmichaelrichards1995-create/richo-portfolio/actions/workflows/ci.yml/badge.svg)
+This repository contains the public R.I.C.H.O. portfolio plus supporting commercial-system scaffolds.
 
-A controlled browser-based runtime layer for the R.I.C.H.O. (Research Intelligence & Continuous Heuristic Optimisation) digital product catalogue.
+## Airwallex PayCore sandbox integration
 
-## Current runtime
+The Airwallex integration is intentionally sandbox-first and keeps credentials server-side.
 
-- 53 addressable products: `RSP-001` through `RSP-053`
-- 6 product-family readiness engines
-- 3 specialised interactive engines for:
-  - RSP-001 — AI Governance Starter Kit
-  - RSP-002 — Paid Pilot Readiness Kit
-  - RSP-003 — Buyer-Ready IP and Due-Diligence Kit
-- deterministic client-side scoring
-- evidence-gap reporting
-- explicit human approval gates
-- no secrets or backend dependency for readiness assessments
-- automated smoke tests before deployment packaging
-
-## Product families
-
-1. Foundation
-2. Governance, Risk & Assurance
-3. Commercial & Revenue
-4. Product & Delivery
-5. Procurement, Market Access & Transactions
-6. Leadership, Workforce & Operating System
-
-## Safety and authority boundary
-
-The runtime is an implementation/readiness aid. A readiness score does not provide professional advice, certification, legal compliance, financial approval, security assurance, contractual acceptance or authority to perform consequential external actions. Human approval remains required where applicable.
-
-## Local verification
+### Environment
 
 ```bash
-node tests/smoke.mjs
+AIRWALLEX_ENV=sandbox
+AIRWALLEX_CLIENT_ID=...
+AIRWALLEX_API_KEY=...
+AIRWALLEX_WEBHOOK_SECRET=...
 ```
 
-The smoke gate checks required runtime files, removes known scaffold placeholders, verifies the complete unique RSP-001–RSP-053 catalogue and confirms the core runtime functions are present.
-
-## Local preview
-
-### Docker
+Production API access remains blocked unless the deployment is deliberately configured with:
 
 ```bash
-docker build -t richo-runtime .
-docker run --rm -p 8080:80 richo-runtime
+AIRWALLEX_ALLOW_PRODUCTION=true
 ```
 
-Open `http://localhost:8080`.
+Do not commit Airwallex credentials or webhook secrets.
 
-You can also serve the repository root with any static HTTP server.
+### Payment flow
 
-## Deployment targets
+1. R.I.C.H.O. resolves the trusted internal order and price server-side.
+2. `airwallex_checkout_service.js` creates a PaymentIntent through `airwallex_integration.js`.
+3. The shopper completes payment through an Airwallex-hosted or embedded checkout surface.
+4. `airwallex_webhook_handler.js` verifies the raw webhook body with HMAC-SHA256 before parsing it.
+5. `airwallex_payment_store.js` applies the event idempotently and prevents older events from overwriting newer state.
+6. The payment ledger stores reconciliation fields and a payload hash rather than the full customer-bearing webhook payload.
 
-Configuration is retained for GitHub Pages, Vercel, Netlify and Docker/Nginx.
+Mount the webhook router in an Express API service at an HTTPS endpoint. The router exposes:
 
-The GitHub Actions workflow runs the smoke gate, packages the static site and attempts a Pages deployment from `main`. GitHub Pages must be enabled in repository settings before the final Pages deployment step can succeed.
+```text
+POST /airwallex
+```
 
-## Production domain
+Subscribe the endpoint to PaymentIntent lifecycle events in Airwallex. A successful `payment_intent.succeeded` webhook is the authoritative fulfillment signal; do not rely only on browser redirects.
 
-Primary Richo Systems domain: `https://richosystems.technology/`
+### Validation
 
-The runtime also links to the Richo Systems tools surface at `/tools`.
+Run:
 
-## Repository structure
+```bash
+npm test
+```
 
-- `index.html` — runtime UI and product surfaces
-- `catalog.js` — canonical RSP-001–RSP-053 runtime catalogue
-- `app.js` — scoring, search, selection and readiness engines
-- `styles.css` — responsive runtime interface
-- `tests/smoke.mjs` — pre-deployment verification
-- `.github/workflows/deploy-pages.yml` — CI/deployment workflow
-- `Dockerfile`, `vercel.json`, `netlify.toml` — alternate deployment targets
+The test suite covers the existing database/marketplace/Stripe scaffolds plus Airwallex client behavior, trusted-order pricing, webhook signature verification, replay protection, duplicate event handling, and out-of-order payment events.
 
-## Completion standard
+## Safety boundary
 
-A product should not be described as fully production-ready merely because it appears in the catalogue. The shared runtime currently gives all 53 products an executable readiness/control layer. Full product-specific software conversion requires each product to receive its own workflow logic, input/output model, persistence/export requirements where appropriate, acceptance tests, documentation and deployment verification.
+The repository is development scaffolding. Production activation requires provider onboarding, production credentials, a deployed HTTPS API endpoint, webhook configuration, sandbox end-to-end payment tests, monitoring, and explicit owner approval.
