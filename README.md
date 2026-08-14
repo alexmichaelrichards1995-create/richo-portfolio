@@ -76,7 +76,7 @@ The runtime also links to the Richo Systems tools surface at `/tools`.
 
 ## Payment integration development
 
-Airwallex sandbox work is isolated in a draft pull request pending provider onboarding and end-to-end sandbox verification.
+Airwallex sandbox development is isolated in draft PR #16 pending provider onboarding and end-to-end sandbox verification.
 
 ## Completion standard
 
