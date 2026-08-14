@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { createClient } from '@/lib/supabase/client'
 
-export function LoginForm() {
+export function LoginForm({ nextPath = '/protected' }: { nextPath?: string }) {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -31,7 +31,7 @@ export function LoginForm() {
       return
     }
 
-    router.replace('/protected')
+    router.replace(nextPath)
     router.refresh()
   }
 
