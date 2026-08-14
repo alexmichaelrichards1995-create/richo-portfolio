@@ -9,6 +9,13 @@ const REQUIRED_ENV = Object.freeze([
   'REVENUE_SYNC_TOKEN',
 ]);
 
+const REQUIRED_TABLES = Object.freeze([
+  'payment_intents',
+  'payment_attempts',
+  'webhook_receipts',
+  'paycore_kv',
+]);
+
 function inspectConfiguration(env = process.env) {
   const configured = Object.fromEntries(
     REQUIRED_ENV.map(key => [key, Boolean(String(env[key] || '').trim())]),
@@ -22,15 +29,13 @@ function inspectConfiguration(env = process.env) {
 }
 
 function validateSchemaProbe(row = {}) {
-  const requiredTables = ['payment_intents', 'paycore_kv'];
-  const present = {
-    payment_intents: Boolean(row.payment_intents),
-    paycore_kv: Boolean(row.paycore_kv),
-  };
+  const present = Object.fromEntries(
+    REQUIRED_TABLES.map(name => [name, Boolean(row[name])]),
+  );
   return {
     present,
-    missingTables: requiredTables.filter(name => !present[name]),
-    schemaReady: requiredTables.every(name => present[name]),
+    missingTables: REQUIRED_TABLES.filter(name => !present[name]),
+    schemaReady: REQUIRED_TABLES.every(name => present[name]),
   };
 }
 
@@ -46,6 +51,8 @@ async function probeDatabase(connectionString) {
     const result = await pool.query(`
       SELECT
         to_regclass('public.payment_intents') AS payment_intents,
+        to_regclass('public.payment_attempts') AS payment_attempts,
+        to_regclass('public.webhook_receipts') AS webhook_receipts,
         to_regclass('public.paycore_kv') AS paycore_kv
     `);
     return validateSchemaProbe(result.rows[0] || {});
@@ -93,7 +100,6 @@ async function runPreflight({ env = process.env, databaseProbe = probeDatabase }
 
 async function main() {
   const result = await runPreflight();
-  // Deliberately prints readiness metadata only. Secret values are never returned.
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   process.exitCode = result.ready ? 0 : 1;
 }
@@ -109,6 +115,7 @@ if (require.main === module) {
 
 module.exports = {
   REQUIRED_ENV,
+  REQUIRED_TABLES,
   inspectConfiguration,
   validateSchemaProbe,
   probeDatabase,
