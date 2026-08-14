@@ -104,17 +104,19 @@ async function collectDatabaseEvidence({ databaseUrl }) {
     `);
 
     const schema = schemaResult.rows[0] || {};
-    const schemaReady = Boolean(schema.payment_intents && schema.webhook_receipts && schema.paycore_kv);
+    const schemaReady = Boolean(
+      schema.payment_intents &&
+      schema.payment_attempts &&
+      schema.webhook_receipts &&
+      schema.paycore_kv
+    );
     let counts = null;
 
     if (schemaReady) {
       const countResult = await pool.query(`
         SELECT
           (SELECT count(*)::text FROM public.payment_intents) AS payment_intents,
-          CASE WHEN to_regclass('public.payment_attempts') IS NOT NULL
-            THEN (SELECT count(*)::text FROM public.payment_attempts)
-            ELSE NULL
-          END AS payment_attempts,
+          (SELECT count(*)::text FROM public.payment_attempts) AS payment_attempts,
           (SELECT count(*)::text FROM public.webhook_receipts) AS webhook_receipts,
           (SELECT count(*)::text FROM public.paycore_kv WHERE key LIKE 'analytics:posthog:purchase:%') AS purchase_analytics_checkpoints
       `);
