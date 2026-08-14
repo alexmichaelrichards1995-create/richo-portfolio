@@ -3,67 +3,80 @@
 
   const POSTHOG_KEY = 'phc_xdyhBomR4xM4AJYXD9gmhVqjMyqvq4JxuSZKRb5Mrd5L';
   const POSTHOG_HOST = 'https://us.i.posthog.com';
-  const POSTHOG_ASSET_HOST = 'https://us-assets.i.posthog.com';
+  const POSTHOG_UI_HOST = 'https://us.posthog.com';
 
   const safeText = value => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 120);
 
-  const queue = [];
-  let initialized = false;
+  function installPostHogQueue() {
+    if (window.posthog?.capture) return window.posthog;
 
-  function capture(event, properties = {}) {
-    const payload = {
-      site: 'richo-product-runtime',
-      ...properties
+    const stub = [];
+    stub._i = [];
+    stub.__SV = 1;
+
+    const queueMethod = method => {
+      stub[method] = (...args) => stub.push([method, ...args]);
     };
 
-    if (initialized && window.posthog?.capture) {
-      window.posthog.capture(event, payload);
-      return;
-    }
+    [
+      'capture',
+      'identify',
+      'register',
+      'register_once',
+      'unregister',
+      'opt_in_capturing',
+      'opt_out_capturing',
+      'has_opted_in_capturing',
+      'has_opted_out_capturing',
+      'reset',
+      'set_config'
+    ].forEach(queueMethod);
 
-    queue.push([event, payload]);
+    stub.init = (token, config = {}, name = 'posthog') => {
+      stub._i.push([token, config, name]);
+
+      const existing = document.querySelector('script[data-richo-posthog]');
+      if (existing) return stub;
+
+      const script = document.createElement('script');
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.dataset.richoPosthog = 'true';
+      script.src = `${config.api_host.replace('.i.posthog.com', '-assets.i.posthog.com')}/static/array.js`;
+      script.addEventListener('error', () => {
+        console.warn('R.I.C.H.O. analytics unavailable; site functionality is unaffected.');
+      }, { once: true });
+      document.head.appendChild(script);
+      return stub;
+    };
+
+    window.posthog = stub;
+    return stub;
   }
 
-  function flushQueue() {
-    if (!initialized || !window.posthog?.capture) return;
-    while (queue.length) {
-      const [event, properties] = queue.shift();
-      window.posthog.capture(event, properties);
-    }
-  }
+  const posthog = installPostHogQueue();
+  posthog.init(POSTHOG_KEY, {
+    api_host: POSTHOG_HOST,
+    ui_host: POSTHOG_UI_HOST,
+    person_profiles: 'identified_only',
+    autocapture: false,
+    capture_pageview: true,
+    capture_pageleave: true,
+    disable_session_recording: true,
+    respect_dnt: true
+  });
 
-  function initPostHog() {
-    if (!window.posthog?.init || initialized) return;
-
-    window.posthog.init(POSTHOG_KEY, {
-      api_host: POSTHOG_HOST,
-      ui_host: 'https://us.posthog.com',
-      person_profiles: 'identified_only',
-      autocapture: false,
-      capture_pageview: true,
-      capture_pageleave: true,
-      disable_session_recording: true,
-      respect_dnt: true
+  function capture(event, properties = {}) {
+    window.posthog?.capture?.(event, {
+      site: 'richo-product-runtime',
+      ...properties
     });
-
-    initialized = true;
-    flushQueue();
   }
 
   window.RICHOAnalytics = Object.freeze({
     track: capture,
-    isReady: () => initialized
+    isReady: () => Boolean(window.posthog?.capture)
   });
-
-  const script = document.createElement('script');
-  script.async = true;
-  script.crossOrigin = 'anonymous';
-  script.src = `${POSTHOG_ASSET_HOST}/static/array.js`;
-  script.addEventListener('load', initPostHog, { once: true });
-  script.addEventListener('error', () => {
-    console.warn('R.I.C.H.O. analytics unavailable; site functionality is unaffected.');
-  }, { once: true });
-  document.head.appendChild(script);
 
   document.addEventListener('click', event => {
     const link = event.target.closest('a');
