@@ -40,8 +40,9 @@ async function run() {
     assert.strictEqual(health.statusCode, 200);
     const healthJson = JSON.parse(health.body);
     assert.strictEqual(healthJson.status, 'alive');
-    assert.strictEqual(healthJson.service, 'richo-revenue-webhook');
+    assert.strictEqual(healthJson.service, 'richo-paycore-revenue-intake');
     assert.strictEqual(healthJson.configured.revenueSync, false);
+    assert.strictEqual(healthJson.configured.liveStripeAuthorized, false);
     assert.strictEqual(health.headers['cache-control'], 'no-store, max-age=0');
 
     const disabledSync = await request(port, { method: 'POST', path: '/api/revenue-sync' });
@@ -58,20 +59,24 @@ async function run() {
     assert.deepStrictEqual(JSON.parse(unauthorizedSync.body), { error: 'unauthorized' });
     delete process.env.REVENUE_SYNC_TOKEN;
 
+    const invalidBody = '{"id":"evt_test"}';
     const invalidWebhook = await request(
       port,
       {
         method: 'POST',
-        path: '/api/stripe',
+        path: '/api/stripe/webhook',
         headers: {
           'content-type': 'application/json',
-          'content-length': Buffer.byteLength('{"id":"evt_test"}'),
+          'content-length': Buffer.byteLength(invalidBody),
         },
       },
-      '{"id":"evt_test"}',
+      invalidBody,
     );
     assert.strictEqual(invalidWebhook.statusCode, 400);
     assert.match(invalidWebhook.body, /invalid webhook/i);
+
+    const webhookGet = await request(port, { method: 'GET', path: '/api/stripe/webhook' });
+    assert.strictEqual(webhookGet.statusCode, 404, 'local Express router should not expose GET webhook handler');
 
     const unknown = await request(port, { method: 'GET', path: '/api/does-not-exist' });
     assert.strictEqual(unknown.statusCode, 404);
