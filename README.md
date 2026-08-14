@@ -102,4 +102,4 @@ The runtime also links to the Richo Systems tools surface at `/tools`.
 
 A product should not be described as fully production-ready merely because it appears in the catalogue. The shared runtime currently gives all 53 products an executable readiness/control layer. Full product-specific software conversion requires each product to receive its own workflow logic, input/output model, persistence/export requirements where appropriate, acceptance tests, documentation and deployment verification.
 
-Likewise, verified purchase code and passing tests do not prove live revenue. Live sales require a deployed webhook endpoint, Stripe endpoint registration, valid production secrets, successful signed-event delivery, and a persisted paid purchase receipt.
+Likewise, verified purchase code and passing tests do not prove live revenue. Live sales require a deployed webhook endpoint, Stripe endpoint registration, valid production secrets, successful signed-event delivery, and a persisted paid purchase receipt. The branch must also satisfy the repository's protected-review and required-status-check rules before production merge.
