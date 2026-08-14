@@ -76,7 +76,8 @@ async function run() {
     assert.match(invalidWebhook.body, /invalid webhook/i);
 
     const webhookGet = await request(port, { method: 'GET', path: '/api/stripe/webhook' });
-    assert.strictEqual(webhookGet.statusCode, 404, 'local Express router should not expose GET webhook handler');
+    assert.strictEqual(webhookGet.statusCode, 405);
+    assert.strictEqual(webhookGet.headers.allow, 'POST');
 
     const unknown = await request(port, { method: 'GET', path: '/api/does-not-exist' });
     assert.strictEqual(unknown.statusCode, 404);
