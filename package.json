@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "scripts": {
     "migrate": "bash scripts/run_migrations.sh",
-    "test": "node tests/db_migrations.test.js && node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js && node tests/stripe_payment_webhook.test.js && node tests/vercel_api_entrypoint.test.js && node tests/stripe_integration.test.js && node tests/stripe_connect.integration.test.js"
+    "test": "node tests/db_migrations.test.js && node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js && node tests/stripe_payment_webhook.test.js && node tests/paycore_revenue_bridge.test.js && node tests/vercel_api_entrypoint.test.js && node tests/stripe_integration.test.js && node tests/stripe_connect.integration.test.js"
   },
   "dependencies": {
     "express": "^4.18.2",
