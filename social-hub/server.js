@@ -85,10 +85,33 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
+// Simple in-memory rate limiter: max 60 requests per IP per minute for /api/* routes
+const rateLimitMap = new Map();
+function apiRateLimit(req, res, next) {
+  const ip = req.ip || req.socket.remoteAddress || 'unknown';
+  const now = Date.now();
+  const window = 60 * 1000;
+  const maxRequests = 60;
+  const entry = rateLimitMap.get(ip) || { count: 0, windowStart: now };
+  if (now - entry.windowStart > window) {
+    entry.count = 0;
+    entry.windowStart = now;
+  }
+  entry.count++;
+  rateLimitMap.set(ip, entry);
+  if (entry.count > maxRequests) {
+    return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+  }
+  next();
+}
+
 // Serve static admin UI
 app.get('/', (_req, res) => {
   res.sendFile(path.join(__dirname, 'index.html'));
 });
+
+// Apply rate limiting to all API routes
+app.use('/api', apiRateLimit);
 
 // ---------------------------------------------------------------------------
 // GET /api/sources
