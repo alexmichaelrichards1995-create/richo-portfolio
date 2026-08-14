@@ -1,0 +1,66 @@
+name: PayCore Activation Evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      require_ready:
+        description: Fail the run unless PayCore is ready for a signed Stripe test
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Collect activation evidence
+        id: evidence
+        continue-on-error: true
+        env:
+          PAYCORE_BASE_URL: ${{ vars.PAYCORE_BASE_URL }}
+          DATABASE_URL: ${{ secrets.PAYCORE_DATABASE_URL }}
+          STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_TEST_WEBHOOK_SECRET }}
+          POSTHOG_PROJECT_TOKEN: ${{ secrets.POSTHOG_PROJECT_TOKEN }}
+          REVENUE_SYNC_TOKEN: ${{ secrets.REVENUE_SYNC_TOKEN }}
+        run: |
+          set +e
+          if [ "${{ inputs.require_ready }}" = "true" ]; then
+            npm run activation:evidence -- --require-ready > activation-evidence.json
+          else
+            npm run activation:evidence > activation-evidence.json
+          fi
+          code=$?
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          cat activation-evidence.json
+          exit 0
+
+      - name: Upload evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: paycore-activation-evidence
+          path: activation-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Enforce readiness gate
+        if: ${{ inputs.require_ready && steps.evidence.outputs.exit_code != '0' }}
+        run: |
+          echo "PayCore is not ready for a signed Stripe test. Review the uploaded evidence artifact."
+          exit 1
