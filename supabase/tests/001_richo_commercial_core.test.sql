@@ -2,7 +2,7 @@ begin;
 
 create extension if not exists pgtap with schema extensions;
 
-select plan(31);
+select plan(32);
 
 -- Core relations exist.
 select has_table('public', 'profiles', 'profiles exists');
@@ -10,7 +10,8 @@ select has_table('public', 'products', 'products exists');
 select has_table('public', 'orders', 'orders exists');
 select has_table('public', 'order_items', 'order_items exists');
 select has_table('public', 'entitlements', 'entitlements exists');
-select has_table('public', 'subscriptions', 'subscriptions exists');
+select has_table('public', 'customer_subscriptions', 'customer_subscriptions exists');
+select hasnt_table('public', 'subscriptions', 'customer schema does not claim the legacy marketplace subscriptions table name');
 select has_table('public', 'audit_events', 'audit_events exists');
 
 -- RLS must remain enabled across every API-exposed commercial table.
@@ -35,8 +36,8 @@ select ok(
   'entitlements RLS enabled'
 );
 select ok(
-  (select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = 'subscriptions'),
-  'subscriptions RLS enabled'
+  (select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = 'customer_subscriptions'),
+  'customer_subscriptions RLS enabled'
 );
 select ok(
   (select c.relrowsecurity from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relname = 'audit_events'),
@@ -76,9 +77,9 @@ select policies_are(
 );
 select policies_are(
   'public',
-  'subscriptions',
-  array['subscriptions_select_own'],
-  'subscriptions policy set is exact'
+  'customer_subscriptions',
+  array['customer_subscriptions_select_own'],
+  'customer_subscriptions policy set is exact'
 );
 select policies_are(
   'public',
