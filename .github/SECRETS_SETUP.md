@@ -42,6 +42,8 @@ The manual GitHub workflow `PayCore Activation Evidence` is read-only with respe
 
 The workflow uses the canonical secrets DATABASE_URL, STRIPE_WEBHOOK_SECRET, POSTHOG_PROJECT_TOKEN and REVENUE_SYNC_TOKEN. It reports only configuration-presence booleans and database evidence; it must never print secret values.
 
+Current production cutover rule: the retained v2.0 PayCore deployment returns 404 for `/api/ready`. Do not treat that deployment as activation-ready. The hardened source-controlled release must return 200 from `/api/ready`, verify the expected PayCore schema, and pass the activation evidence gate before any signed Stripe test is run.
+
 4) Enable branch protection for 'main' to require CI:
 
 # Require GitHub Actions to pass before merging
