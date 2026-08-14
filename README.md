@@ -74,6 +74,10 @@ The runtime also links to the Richo Systems tools surface at `/tools`.
 - `.github/workflows/deploy-pages.yml` — CI/deployment workflow
 - `Dockerfile`, `vercel.json`, `netlify.toml` — alternate deployment targets
 
+## Payment integration development
+
+Airwallex sandbox development remains isolated in draft PR #16 until provider onboarding and end-to-end sandbox verification are complete.
+
 ## Completion standard
 
 A product should not be described as fully production-ready merely because it appears in the catalogue. The shared runtime currently gives all 53 products an executable readiness/control layer. Full product-specific software conversion requires each product to receive its own workflow logic, input/output model, persistence/export requirements where appropriate, acceptance tests, documentation and deployment verification.
