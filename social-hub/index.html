@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Social Hub — Source Discovery</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; background: #f5f5f5; color: #222; }
+    header { background: #1a1a2e; color: #fff; padding: 1rem 2rem; }
+    header h1 { margin: 0; font-size: 1.4rem; }
+    main { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+    h2 { font-size: 1.1rem; margin-bottom: .5rem; }
+    .card { background: #fff; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.1); padding: 1.5rem; margin-bottom: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { text-align: left; padding: .5rem .75rem; border-bottom: 1px solid #eee; }
+    th { background: #f0f0f0; }
+    .badge { display: inline-block; padding: .2rem .5rem; border-radius: 4px; font-size: .75rem; font-weight: 600; }
+    .badge.enabled  { background: #d4edda; color: #155724; }
+    .badge.disabled { background: #f8d7da; color: #721c24; }
+    form.add-form { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    form.add-form label { font-size: .85rem; font-weight: 600; }
+    form.add-form input, form.add-form select { width: 100%; padding: .45rem .6rem; border: 1px solid #ccc; border-radius: 4px; }
+    .btn { padding: .45rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: .85rem; }
+    .btn-primary  { background: #1a1a2e; color: #fff; }
+    .btn-danger   { background: #dc3545; color: #fff; }
+    .btn-sm       { padding: .25rem .6rem; font-size: .78rem; }
+    .btn-toggle   { background: #6c757d; color: #fff; }
+    #msg { min-height: 1.4rem; font-size: .85rem; color: #155724; }
+    .export-row { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+    input[type=file] { font-size: .85rem; }
+    .span2 { grid-column: span 2; }
+    .connection-status { font-size: .75rem; color: #555; }
+  </style>
+</head>
+<body>
+<header><h1>🌐 Social Hub — Source Discovery</h1></header>
+<main>
+
+  <div class="card">
+    <h2>Sources</h2>
+    <div id="msg"></div>
+    <table id="sources-table">
+      <thead>
+        <tr>
+          <th>ID</th><th>Provider</th><th>Title</th><th>Handle / URL</th>
+          <th>Status</th><th>Last Checked</th><th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="sources-body">
+        <tr><td colspan="7">Loading…</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <h2>Add Source</h2>
+    <form class="add-form" id="add-form">
+      <div>
+        <label for="provider">Provider</label>
+        <select id="provider" name="provider" required>
+          <option value="">— select —</option>
+          <option value="rss">RSS</option>
+          <option value="domain">Domain</option>
+          <option value="twitter">Twitter</option>
+          <option value="mastodon">Mastodon</option>
+          <option value="youtube">YouTube</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div>
+        <label for="handle_or_url">Handle or URL</label>
+        <input id="handle_or_url" name="handle_or_url" type="text" placeholder="https://… or @handle" required />
+      </div>
+      <div>
+        <label for="title">Title (optional)</label>
+        <input id="title" name="title" type="text" placeholder="Friendly name" />
+      </div>
+      <div style="display:flex;align-items:flex-end">
+        <label style="display:flex;align-items:center;gap:.4rem;font-weight:400">
+          <input type="checkbox" id="enabled" name="enabled" checked /> Enabled
+        </label>
+      </div>
+      <div class="span2" id="validation-msg" style="color:#dc3545;font-size:.85rem;min-height:1.2rem"></div>
+      <div class="span2">
+        <button type="submit" class="btn btn-primary">Add Source</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Import / Export</h2>
+    <div class="export-row">
+      <a href="/api/config/export" class="btn btn-primary" download="social-hub-config.json">⬇ Export config.json</a>
+      <label class="btn btn-toggle" style="cursor:pointer">
+        ⬆ Import config.json
+        <input type="file" id="import-file" accept=".json" style="display:none" />
+      </label>
+      <span id="import-msg" style="font-size:.85rem;color:#155724"></span>
+    </div>
+  </div>
+
+</main>
+<script>
+(function () {
+  'use strict';
+
+  const tbody = document.getElementById('sources-body');
+  const msg   = document.getElementById('msg');
+  const valMsg = document.getElementById('validation-msg');
+
+  function setMsg(text, ok = true) {
+    msg.style.color = ok ? '#155724' : '#721c24';
+    msg.textContent = text;
+    setTimeout(() => { msg.textContent = ''; }, 4000);
+  }
+
+  function fmt(val) {
+    return val ? new Date(val).toLocaleString() : '—';
+  }
+
+  function renderSources(sources) {
+    if (!sources.length) {
+      tbody.innerHTML = '<tr><td colspan="7" style="color:#888">No sources configured.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = sources.map((s) => `
+      <tr data-id="${escHtml(s.id)}">
+        <td><code style="font-size:.75rem">${escHtml(s.id)}</code></td>
+        <td>${escHtml(s.provider)}</td>
+        <td>${escHtml(s.title)}</td>
+        <td style="word-break:break-all;max-width:200px">${escHtml(s.handle_or_url)}</td>
+        <td><span class="badge ${s.enabled ? 'enabled' : 'disabled'}">${s.enabled ? 'enabled' : 'disabled'}</span></td>
+        <td class="connection-status">${fmt(s.last_checked_at)}<br>${s.last_success ? '✅ ' + fmt(s.last_success) : ''}</td>
+        <td>
+          <button class="btn btn-sm btn-toggle" data-action="toggle" data-id="${escHtml(s.id)}" data-enabled="${!s.enabled}">${s.enabled ? 'Disable' : 'Enable'}</button>
+          <button class="btn btn-sm btn-danger" data-action="remove" data-id="${escHtml(s.id)}">Remove</button>
+        </td>
+      </tr>`).join('');
+  }
+
+  function escHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  async function loadSources() {
+    const res = await fetch('/api/sources');
+    const data = await res.json();
+    renderSources(data.sources || []);
+  }
+
+  async function toggleSource(id, enabled) {
+    const res = await fetch(`/api/sources/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setMsg(`Source ${id} ${enabled ? 'enabled' : 'disabled'}.`);
+      loadSources();
+    } else {
+      setMsg(data.error || 'Error', false);
+    }
+  }
+
+  async function removeSource(id) {
+    if (!confirm(`Remove source "${id}"?`)) return;
+    const res = await fetch(`/api/sources/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) {
+      setMsg(`Removed source ${id}.`);
+      loadSources();
+    } else {
+      setMsg(data.error || 'Error', false);
+    }
+  }
+
+  tbody.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-action]');
+    if (!btn) return;
+    const id = btn.dataset.id;
+    if (btn.dataset.action === 'toggle') {
+      toggleSource(id, btn.dataset.enabled === 'true');
+    } else if (btn.dataset.action === 'remove') {
+      removeSource(id);
+    }
+  });
+
+  document.getElementById('add-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    valMsg.textContent = '';
+    const provider     = document.getElementById('provider').value;
+    const handle_or_url = document.getElementById('handle_or_url').value.trim();
+    const title        = document.getElementById('title').value.trim();
+    const enabled      = document.getElementById('enabled').checked;
+
+    const res = await fetch('/api/sources', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider, handle_or_url, title, enabled }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setMsg('Source added: ' + data.source.id);
+      e.target.reset();
+      loadSources();
+    } else {
+      valMsg.textContent = data.error || 'Error adding source';
+    }
+  });
+
+  document.getElementById('import-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const text = await file.text();
+    let parsed;
+    try { parsed = JSON.parse(text); } catch (_) {
+      document.getElementById('import-msg').textContent = 'Invalid JSON file.';
+      return;
+    }
+    const res = await fetch('/api/config/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(parsed),
+    });
+    const data = await res.json();
+    const importMsg = document.getElementById('import-msg');
+    if (res.ok) {
+      importMsg.textContent = `Imported ${data.imported} source(s).`;
+      loadSources();
+    } else {
+      importMsg.style.color = '#721c24';
+      importMsg.textContent = data.error || 'Import failed.';
+    }
+    e.target.value = '';
+  });
+
+  loadSources();
+})();
+</script>
+</body>
+</html>
