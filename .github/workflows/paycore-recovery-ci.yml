@@ -76,6 +76,54 @@ jobs:
         run: npm run typecheck
       - name: Production build
         run: npm run build
+      - name: Live signed webhook integration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/paycore_test
+          STRIPE_SECRET_KEY: sk_test_ci_disposable_only
+          STRIPE_WEBHOOK_SECRET: whsec_ci_disposable_richo_paycore
+          PAYCORE_PII_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          EMAIL_HASH_PEPPER: ci-only-pepper-not-production
+        run: |
+          set -euo pipefail
+          PORT=3001 npm run start > /tmp/paycore-next.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; cat /tmp/paycore-next.log || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/ >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "::error::PayCore server did not become ready"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          unsigned_status="$(curl -sS -o /tmp/unsigned.json -w '%{http_code}' -X POST http://127.0.0.1:3001/api/stripe/webhook --data-binary '{}')"
+          test "$unsigned_status" = "400"
+          grep -q 'missing_stripe_signature' /tmp/unsigned.json
+
+          now="$(date +%s)"
+          payload="$(printf '{\"id\":\"evt_richo_ci_expired_001\",\"object\":\"event\",\"created\":%s,\"data\":{\"object\":{\"id\":\"cs_test_richo_ci_001\",\"object\":\"checkout.session\",\"metadata\":{}}},\"livemode\":false,\"pending_webhooks\":1,\"request\":null,\"type\":\"checkout.session.expired\"}' "$now")"
+          signature="$(printf '%s.%s' "$now" "$payload" | openssl dgst -sha256 -hmac "$STRIPE_WEBHOOK_SECRET" -hex | awk '{print $2}')"
+          stripe_header="t=$now,v1=$signature"
+
+          first_status="$(curl -sS -o /tmp/first.json -w '%{http_code}' -X POST http://127.0.0.1:3001/api/stripe/webhook -H 'content-type: application/json' -H "stripe-signature: $stripe_header" --data-binary "$payload")"
+          test "$first_status" = "200"
+          grep -q '"received":true' /tmp/first.json
+          grep -q '"action":"processed"' /tmp/first.json
+
+          second_status="$(curl -sS -o /tmp/second.json -w '%{http_code}' -X POST http://127.0.0.1:3001/api/stripe/webhook -H 'content-type: application/json' -H "stripe-signature: $stripe_header" --data-binary "$payload")"
+          test "$second_status" = "200"
+          grep -q '"duplicate":true' /tmp/second.json
+
+          receipt_count="$(psql "$TEST_DATABASE_URL" -Atc "SELECT count(*) FROM webhook_receipts WHERE provider='stripe' AND event_id='evt_richo_ci_expired_001' AND status='processed';")"
+          test "$receipt_count" = "1"
+          intent_count="$(psql "$TEST_DATABASE_URL" -Atc "SELECT count(*) FROM payment_intents;")"
+          test "$intent_count" = "0"
+
+          echo "PAYCORE_LIVE_WEBHOOK_OK"
       - name: Reject opaque bootstrap build mechanism
         run: |
           test ! -f bootstrap.mjs
