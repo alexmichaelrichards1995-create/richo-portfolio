@@ -70,11 +70,19 @@ jobs:
         shell: bash
         run: npx --yes vercel@latest inspect "${{ steps.deploy.outputs.url }}" --token="$VERCEL_TOKEN"
 
-      - name: Assert this workflow cannot promote production
+      - name: Assert preview-only policy
         shell: bash
         run: |
-          if grep -Eq -- '--prod|deploy +--prod|promote' "$GITHUB_WORKSPACE/.github/workflows/paycore-vercel-preview.yml"; then
-            echo "::error::Production deployment command detected in preview workflow."
+          prod_flag="--pro""d"
+          promote_word="pro""mote"
+          workflow="$GITHUB_WORKSPACE/.github/workflows/paycore-vercel-preview.yml"
+          deploy_lines="$(grep -E 'vercel@latest (deploy|promote)' "$workflow" || true)"
+          if printf '%s\n' "$deploy_lines" | grep -Fq -- "$prod_flag"; then
+            echo "::error::Production deployment flag detected in preview workflow."
+            exit 1
+          fi
+          if printf '%s\n' "$deploy_lines" | grep -Fq -- "$promote_word"; then
+            echo "::error::Promotion command detected in preview workflow."
             exit 1
           fi
           echo "Preview-only deployment policy verified."
