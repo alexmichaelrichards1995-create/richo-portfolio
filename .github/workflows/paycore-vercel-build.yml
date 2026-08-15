@@ -1,0 +1,72 @@
+name: PayCore Vercel Build Gate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paycore-vercel-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_nelzyuU71azKli5ThIr26ppU
+  VERCEL_PROJECT_ID: prj_zrBxApzFOjSTnBHTmsa9P17EHAtf
+  VERCEL_CLI_VERSION: 55.0.0
+
+jobs:
+  build-preview-artifact-only:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact ref
+        uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Require Vercel authentication
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "VERCEL_TOKEN is not configured in GitHub Actions secrets." >&2
+            exit 1
+          fi
+
+      - name: Pull preview project configuration
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx --yes vercel@${VERCEL_CLI_VERSION} pull \
+            --yes \
+            --environment=preview \
+            --git-branch="${GITHUB_REF_NAME}" \
+            --token="$VERCEL_TOKEN"
+
+      - name: Build preview artifact only
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          # Deliberately build-only. Do not add `vercel deploy`, `--prod`,
+          # `vercel promote`, or any production-alias mutation to this workflow.
+          npx --yes vercel@${VERCEL_CLI_VERSION} build \
+            --target=preview \
+            --yes \
+            --token="$VERCEL_TOKEN"
+
+      - name: Verify Vercel build output
+        run: |
+          set -euo pipefail
+          test -d .vercel/output
+          test -f .vercel/output/config.json
+          echo "Vercel preview build artifact generated successfully; nothing was deployed." >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: ${GITHUB_SHA}" >> "$GITHUB_STEP_SUMMARY"
