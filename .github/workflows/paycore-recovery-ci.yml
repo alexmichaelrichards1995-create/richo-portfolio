@@ -1,0 +1,130 @@
+name: PayCore Recovery CI
+
+on:
+  pull_request:
+    paths:
+      - 'services/paycore-intake/**'
+      - '.github/workflows/paycore-recovery-ci.yml'
+  push:
+    branches:
+      - recovery/paycore-source-v2
+    paths:
+      - 'services/paycore-intake/**'
+      - '.github/workflows/paycore-recovery-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: paycore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d paycore_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    defaults:
+      run:
+        working-directory: services/paycore-intake
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/paycore_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: services/paycore-intake/package.json
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Apply recovered PayCore schema
+        run: psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/001_paycore_schema.sql
+      - name: Verify durable payment schema contract
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "
+            SELECT CASE WHEN
+              to_regclass('public.payment_intents') IS NOT NULL AND
+              to_regclass('public.payment_attempts') IS NOT NULL AND
+              to_regclass('public.idempotency_records') IS NOT NULL AND
+              to_regclass('public.webhook_receipts') IS NOT NULL AND
+              to_regclass('public.paycore_kv') IS NOT NULL AND
+              EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='webhook_receipts' AND column_name='payload' AND data_type='jsonb') AND
+              EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='webhook_receipts_pkey') AND
+              EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='payment_attempts_provider_external_id_key')
+            THEN 'PAYCORE_SCHEMA_OK' ELSE 'PAYCORE_SCHEMA_BAD' END;
+          " | grep -qx PAYCORE_SCHEMA_OK
+      - name: Verify schema is idempotent
+        run: psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/001_paycore_schema.sql
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Unit and source-contract tests
+        run: npm test
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Live signed webhook integration
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/paycore_test
+          STRIPE_SECRET_KEY: sk_test_ci_disposable_only
+          STRIPE_WEBHOOK_SECRET: whsec_ci_disposable_richo_paycore
+          PAYCORE_PII_ENCRYPTION_KEY: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+          EMAIL_HASH_PEPPER: ci-only-pepper-not-production
+        run: |
+          set -euo pipefail
+          PORT=3001 npm run start > /tmp/paycore-next.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; cat /tmp/paycore-next.log || true' EXIT
+
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:3001/ >/dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              echo "::error::PayCore server did not become ready"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          unsigned_status="$(curl -sS -o /tmp/unsigned.json -w '%{http_code}' -X POST http://127.0.0.1:3001/api/stripe/webhook --data-binary '{}')"
+          test "$unsigned_status" = "400"
+          grep -q 'missing_stripe_signature' /tmp/unsigned.json
+
+          now="$(date +%s)"
+          payload="$(printf '{\"id\":\"evt_richo_ci_expired_001\",\"object\":\"event\",\"created\":%s,\"data\":{\"object\":{\"id\":\"cs_test_richo_ci_001\",\"object\":\"checkout.session\",\"metadata\":{}}},\"livemode\":false,\"pending_webhooks\":1,\"request\":null,\"type\":\"checkout.session.expired\"}' "$now")"
+          signature="$(printf '%s.%s' "$now" "$payload" | openssl dgst -sha256 -hmac "$STRIPE_WEBHOOK_SECRET" -hex | awk '{print $2}')"
+          stripe_header="t=$now,v1=$signature"
+
+          first_status="$(curl -sS -o /tmp/first.json -w '%{http_code}' -X POST http://127.0.0.1:3001/api/stripe/webhook -H 'content-type: application/json' -H "stripe-signature: $stripe_header" --data-binary "$payload")"
+          test "$first_status" = "200"
+          grep -q '"received":true' /tmp/first.json
+          grep -q '"action":"processed"' /tmp/first.json
+
+          second_status="$(curl -sS -o /tmp/second.json -w '%{http_code}' -X POST http://127.0.0.1:3001/api/stripe/webhook -H 'content-type: application/json' -H "stripe-signature: $stripe_header" --data-binary "$payload")"
+          test "$second_status" = "200"
+          grep -q '"duplicate":true' /tmp/second.json
+
+          receipt_count="$(psql "$TEST_DATABASE_URL" -Atc "SELECT count(*) FROM webhook_receipts WHERE provider='stripe' AND event_id='evt_richo_ci_expired_001' AND status='processed';")"
+          test "$receipt_count" = "1"
+          intent_count="$(psql "$TEST_DATABASE_URL" -Atc "SELECT count(*) FROM payment_intents;")"
+          test "$intent_count" = "0"
+
+          echo "PAYCORE_LIVE_WEBHOOK_OK"
+      - name: Reject opaque bootstrap build mechanism
+        run: |
+          test ! -f bootstrap.mjs
+          ! grep -q 'bootstrap.mjs' package.json
