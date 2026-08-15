@@ -54,6 +54,13 @@ const WEBHOOK_KEYS = [
   "EMAIL_HASH_PEPPER",
 ] as const;
 
+const REQUIRED_DATABASE_TABLES = [
+  "payment_intents",
+  "payment_attempts",
+  "idempotency_records",
+  "webhook_receipts",
+] as const;
+
 export function configured(env: RuntimeEnv) {
   return {
     stripe_api: Boolean(env.STRIPE_SECRET_KEY),
@@ -92,14 +99,47 @@ export function database(url: string): SqlClient {
   return neon(url, { fullResults: false });
 }
 
-export async function pingDatabase(url: string): Promise<boolean> {
+export type DatabaseStatus = {
+  reachable: boolean;
+  schemaReady: boolean;
+  missingTables: string[];
+  webhookPayloadColumn: boolean;
+};
+
+export async function inspectDatabase(url: string): Promise<DatabaseStatus> {
   try {
     const sql = database(url);
-    await sql`SELECT 1 AS ok`;
-    return true;
+    const rows = await sql`
+      SELECT
+        to_regclass('public.payment_intents') IS NOT NULL AS payment_intents,
+        to_regclass('public.payment_attempts') IS NOT NULL AS payment_attempts,
+        to_regclass('public.idempotency_records') IS NOT NULL AS idempotency_records,
+        to_regclass('public.webhook_receipts') IS NOT NULL AS webhook_receipts,
+        EXISTS (
+          SELECT 1
+            FROM information_schema.columns
+           WHERE table_schema = 'public'
+             AND table_name = 'webhook_receipts'
+             AND column_name = 'payload'
+             AND data_type = 'jsonb'
+        ) AS webhook_payload
+    ` as unknown as Array<Record<string, boolean>>;
+    const row = rows[0] ?? {};
+    const missingTables = REQUIRED_DATABASE_TABLES.filter((table) => row[table] !== true);
+    const webhookPayloadColumn = row.webhook_payload === true;
+    return {
+      reachable: true,
+      schemaReady: missingTables.length === 0 && webhookPayloadColumn,
+      missingTables: webhookPayloadColumn ? [...missingTables] : [...missingTables, "webhook_receipts.payload"],
+      webhookPayloadColumn,
+    };
   } catch {
-    return false;
+    return { reachable: false, schemaReady: false, missingTables: [...REQUIRED_DATABASE_TABLES], webhookPayloadColumn: false };
   }
+}
+
+export async function pingDatabase(url: string): Promise<boolean> {
+  return (await inspectDatabase(url)).reachable;
 }
 
 export function stripeClient(secretKey: string): Stripe {
@@ -117,6 +157,27 @@ export async function verifyStripeAccount(secretKey: string, expected?: string):
     return { ok: true, accountPinned: Boolean(expected) };
   } catch {
     return { ok: false, accountPinned: Boolean(expected) };
+  }
+}
+
+const accountPinCache = new Map<string, number>();
+const ACCOUNT_PIN_CACHE_MS = 5 * 60 * 1000;
+
+export async function assertStripeAccount(secretKey: string, expected?: string): Promise<void> {
+  if (!expected) return;
+  const cacheKey = `${sha256(secretKey)}:${expected}`;
+  const cachedUntil = accountPinCache.get(cacheKey) ?? 0;
+  if (cachedUntil > Date.now()) return;
+
+  try {
+    const account = await stripeClient(secretKey).accounts.retrieve();
+    if (account.id !== expected) {
+      throw new PayCoreError("stripe_account_mismatch", { httpStatus: 503 });
+    }
+    accountPinCache.set(cacheKey, Date.now() + ACCOUNT_PIN_CACHE_MS);
+  } catch (error) {
+    if (error instanceof PayCoreError) throw error;
+    throw new PayCoreError("stripe_account_verification_failed", { httpStatus: 503, retryable: true });
   }
 }
 
