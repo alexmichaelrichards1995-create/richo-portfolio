@@ -1,50 +1,49 @@
-# R.I.C.H.O. PayCore Payment Intake v2.2.1
+# R.I.C.H.O. PayCore Intake — v2.2.1 Source Recovery
 
-This directory is the auditable source-controlled recovery of the R.I.C.H.O. Stripe payment intake service.
-
-## Why this recovery exists
-
-The active Vercel project has a known-good v2.0.0 production deployment. A later v2.2.0 deployment failed before `next build` because its package ran a generated, compressed `bootstrap.mjs` step. The original v2.2 source package was not preserved. This recovery deliberately does not reproduce that opaque build mechanism.
+This service restores the authoritative Stripe payment-intake path from auditable source after the later generated bootstrap deployment failed before the normal Next.js build completed.
 
 ## Authority boundary
 
-PayCore is the payment system of record. Browser analytics and PostHog are never payment authority.
+PayCore is authoritative for payment state. Checkout redirects and analytics are not payment truth. PostHog remains downstream analytics only. This service does not grant autonomous refund, payout, transfer, dispute, banking, tax or fulfilment authority.
 
-A successful sale requires all of these gates:
+## Runtime routes
 
-1. server-owned SKU, price and currency;
-2. Stripe-hosted Checkout session created from that canonical state;
-3. exact raw Stripe webhook signature verification;
-4. durable event claim in `webhook_receipts`;
-5. canonical order/SKU/amount/currency validation;
-6. succeeded Stripe payment state;
-7. atomic PayCore promotion to `succeeded`;
-8. durable payment-attempt evidence;
-9. fulfilment only staged after verified success.
+- `GET /api/health` — fail-closed configuration, database-schema and Stripe-account readiness.
+- `POST /api/checkout/[sku]` — server-owned product/price Checkout creation.
+- `POST /api/stripe/webhook` — exact raw-body Stripe signature verification, durable provider-event claim, canonical commercial validation and idempotent state transition.
 
-## Required environment
+## Database transports
 
-See `.env.example`. Real secret values must remain in Vercel environment variables or another approved secret manager; never commit them.
+Production Neon URLs use `@neondatabase/serverless`. Localhost recovery/CI URLs use the standard `pg` driver through the same tagged-query contract. The local adapter exists to prove the real built Next.js service against ordinary PostgreSQL 16; it does not alter the deployed Neon authority model.
 
-## Commands
+Recovery CI must prove both schema compatibility and real HTTP execution:
 
-```bash
-npm install
-npm test
-npm run typecheck
-npm run build
-```
+1. start a fresh PostgreSQL 16 database;
+2. apply `sql/001_paycore_schema.sql` twice;
+3. pass source/security tests and TypeScript;
+4. complete a real Next.js production build;
+5. start the built server;
+6. reject an unsigned webhook;
+7. accept a correctly HMAC-signed Stripe-style event;
+8. persist exactly one durable receipt;
+9. replay the same event and prove duplicate suppression;
+10. reject any reintroduction of `bootstrap.mjs`.
 
-The build script intentionally runs tests and typecheck before `next build`. CI also asserts that `bootstrap.mjs` is absent and not referenced by the build command.
+## Required secure runtime configuration
 
-## Deployment gate
+Never commit real values. The runtime stays `activation_required` unless the required configuration exists:
 
-This recovered service must not replace the currently serving production deployment until:
+- `DATABASE_URL`
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `PAYCORE_PII_ENCRYPTION_KEY`
+- `EMAIL_HASH_PEPPER`
+- `NEXT_PUBLIC_SITE_URL`
+- optional `STRIPE_EXPECTED_ACCOUNT_ID`
+- optional `CHECKOUT_ALLOWED_ORIGINS`
 
-- CI passes on the exact commit;
-- a Vercel preview build reaches READY;
-- test-mode `DATABASE_URL`, Stripe restricted/test API key and endpoint-specific webhook secret are configured;
-- `/api/health` reports ready in test mode;
-- one controlled test checkout produces exactly one durable webhook receipt and payment success;
-- duplicate Stripe delivery is acknowledged without a second sale;
-- the verified PayCore success is sent once to revenue analytics.
+Test mode must be activated before any live-mode consideration. Keep the Stripe account pin enabled when a stable account ID is known.
+
+## Replacement gate
+
+Do not replace the currently serving fallback merely because the project builds. Promotion requires a controlled deployed environment with secure test credentials, schema-ready database, healthy Checkout/webhook readiness, one successful Stripe test Checkout, one durable verified success, explicit duplicate-event proof, and downstream analytics emitted only after PayCore success.
