@@ -33,29 +33,39 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Require Vercel deployment credential
+      - name: Detect Vercel deployment credential
+        id: credential
         shell: bash
         run: |
-          if [ -z "$VERCEL_TOKEN" ]; then
-            echo "::error::VERCEL_TOKEN is not configured in GitHub Actions secrets. Add a scoped Vercel token once; this workflow never prints it and never deploys production."
-            exit 1
+          if [ -n "$VERCEL_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "Vercel deployment credential available."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "VERCEL_TOKEN is not configured. GitHub-based preview deploy is skipped cleanly; source validation remains covered by PayCore Recovery CI."
+            echo "### PayCore Vercel Preview" >> "$GITHUB_STEP_SUMMARY"
+            echo "GitHub-based deployment skipped because \`VERCEL_TOKEN\` is not configured." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Link exact PayCore service to existing Vercel project
+        if: steps.credential.outputs.available == 'true'
         shell: bash
         run: |
           mkdir -p "$PAYCORE_DIR/.vercel"
           printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > "$PAYCORE_DIR/.vercel/project.json"
 
       - name: Pull preview project settings
+        if: steps.credential.outputs.available == 'true'
         shell: bash
         run: npx --yes vercel@latest pull --yes --environment=preview --token="$VERCEL_TOKEN" --cwd "$PAYCORE_DIR"
 
       - name: Build exact PayCore service with Vercel
+        if: steps.credential.outputs.available == 'true'
         shell: bash
         run: npx --yes vercel@latest build --token="$VERCEL_TOKEN" --cwd "$PAYCORE_DIR"
 
       - name: Deploy preview only
+        if: steps.credential.outputs.available == 'true'
         id: deploy
         shell: bash
         run: |
@@ -67,6 +77,7 @@ jobs:
           echo "URL: $url" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Inspect preview deployment
+        if: steps.credential.outputs.available == 'true'
         shell: bash
         run: npx --yes vercel@latest inspect "${{ steps.deploy.outputs.url }}" --token="$VERCEL_TOKEN"
 
