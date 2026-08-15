@@ -45,6 +45,20 @@ async function run() {
     assert.strictEqual(healthJson.configured.liveStripeAuthorized, false);
     assert.strictEqual(health.headers['cache-control'], 'no-store, max-age=0');
 
+    const offers = await request(port, { method: 'GET', path: '/api/offers' });
+    assert.strictEqual(offers.statusCode, 200);
+    const offerJson = JSON.parse(offers.body);
+    assert.strictEqual(offerJson.currency, 'AUD');
+    assert.strictEqual(offerJson.offers.length, 3);
+    assert.deepStrictEqual(
+      offerJson.offers.map(offer => offer.amountMinor),
+      [1900, 4900, 19700],
+    );
+
+    const checkoutGet = await request(port, { method: 'GET', path: '/api/checkout/quick-wins-kit' });
+    assert.strictEqual(checkoutGet.statusCode, 405);
+    assert.strictEqual(checkoutGet.headers.allow, 'POST');
+
     const disabledSync = await request(port, { method: 'POST', path: '/api/revenue-sync' });
     assert.strictEqual(disabledSync.statusCode, 503);
     assert.deepStrictEqual(JSON.parse(disabledSync.body), { error: 'revenue_sync_disabled' });
