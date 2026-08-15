@@ -1,0 +1,45 @@
+name: PayCore Recovery CI
+
+on:
+  pull_request:
+    paths:
+      - 'services/paycore-intake/**'
+      - '.github/workflows/paycore-recovery-ci.yml'
+  push:
+    branches:
+      - recovery/paycore-source-v2
+    paths:
+      - 'services/paycore-intake/**'
+      - '.github/workflows/paycore-recovery-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/paycore-intake
+    env:
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: services/paycore-intake/package.json
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Unit and source-contract tests
+        run: npm test
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
+      - name: Reject opaque bootstrap build mechanism
+        run: |
+          test ! -f bootstrap.mjs
+          ! grep -q 'bootstrap.mjs' package.json
