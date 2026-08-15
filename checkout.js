@@ -14,6 +14,27 @@
     else delete status.dataset.state;
   }
 
+  function track(event, properties) {
+    window.RICHOAnalytics?.track?.(event, properties);
+  }
+
+  function showReturnState() {
+    let paymentState = '';
+    try {
+      paymentState = new URL(window.location.href).searchParams.get('payment') || '';
+    } catch (_) {
+      return;
+    }
+
+    if (paymentState === 'success') {
+      announce('Returned from Stripe. PayCore is verifying the signed payment event; this page alone does not confirm a completed sale.', 'pending');
+      track('richo_checkout_returned', { state: 'verification_pending' });
+    } else if (paymentState === 'cancelled') {
+      announce('Checkout was cancelled. No completed sale is inferred; you can start again whenever you are ready.', 'cancelled');
+      track('richo_checkout_returned', { state: 'cancelled' });
+    }
+  }
+
   function makeIdempotencyKey(sku) {
     const random = globalThis.crypto?.randomUUID?.();
     if (random) return `richo-web-${sku}-${random}`;
@@ -36,10 +57,6 @@
     const hostname = parsed.hostname.toLowerCase();
     if (hostname !== 'checkout.stripe.com' && !hostname.endsWith('.checkout.stripe.com')) return null;
     return parsed.toString();
-  }
-
-  function track(event, properties) {
-    window.RICHOAnalytics?.track?.(event, properties);
   }
 
   async function beginCheckout(button) {
@@ -126,6 +143,8 @@
       pendingKeys.delete(button);
     }
   }
+
+  showReturnState();
 
   buttons.forEach(button => {
     button.addEventListener('click', () => beginCheckout(button));
