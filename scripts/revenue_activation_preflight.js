@@ -1,10 +1,14 @@
 'use strict';
 
 const { Pool } = require('pg');
+const { checkoutBaseUrl, stripeModeFromKey } = require('../paycore_checkout');
 
 const REQUIRED_ENV = Object.freeze([
   'DATABASE_URL',
+  'STRIPE_API_KEY',
   'STRIPE_WEBHOOK_SECRET',
+  'CHECKOUT_BASE_URL',
+  'AU_GST_REGISTERED',
   'POSTHOG_PROJECT_TOKEN',
   'REVENUE_SYNC_TOKEN',
 ]);
@@ -14,17 +18,43 @@ const REQUIRED_TABLES = Object.freeze([
   'payment_attempts',
   'webhook_receipts',
   'paycore_kv',
+  'idempotency_records',
 ]);
+
+function configuredValue(key, env) {
+  const value = String(env[key] || '').trim();
+  if (key === 'AU_GST_REGISTERED') return value === 'true' || value === 'false';
+  return Boolean(value);
+}
 
 function inspectConfiguration(env = process.env) {
   const configured = Object.fromEntries(
-    REQUIRED_ENV.map(key => [key, Boolean(String(env[key] || '').trim())]),
+    REQUIRED_ENV.map(key => [key, configuredValue(key, env)]),
   );
   const missing = REQUIRED_ENV.filter(key => !configured[key]);
+  const invalid = [];
+
+  if (configured.STRIPE_API_KEY) {
+    const stripeMode = stripeModeFromKey(env.STRIPE_API_KEY);
+    if (stripeMode === 'unknown') invalid.push('STRIPE_API_KEY_MODE');
+    if (stripeMode === 'live' && env.ALLOW_LIVE_STRIPE !== 'true') {
+      invalid.push('LIVE_STRIPE_NOT_AUTHORIZED');
+    }
+  }
+
+  if (configured.CHECKOUT_BASE_URL) {
+    try {
+      checkoutBaseUrl(env);
+    } catch (_) {
+      invalid.push('CHECKOUT_BASE_URL');
+    }
+  }
+
   return {
     configured,
     missing,
-    environmentReady: missing.length === 0,
+    invalid,
+    environmentReady: missing.length === 0 && invalid.length === 0,
   };
 }
 
@@ -53,7 +83,8 @@ async function probeDatabase(connectionString) {
         to_regclass('public.payment_intents') AS payment_intents,
         to_regclass('public.payment_attempts') AS payment_attempts,
         to_regclass('public.webhook_receipts') AS webhook_receipts,
-        to_regclass('public.paycore_kv') AS paycore_kv
+        to_regclass('public.paycore_kv') AS paycore_kv,
+        to_regclass('public.idempotency_records') AS idempotency_records
     `);
     return validateSchemaProbe(result.rows[0] || {});
   } finally {
@@ -116,6 +147,7 @@ if (require.main === module) {
 module.exports = {
   REQUIRED_ENV,
   REQUIRED_TABLES,
+  configuredValue,
   inspectConfiguration,
   validateSchemaProbe,
   probeDatabase,
