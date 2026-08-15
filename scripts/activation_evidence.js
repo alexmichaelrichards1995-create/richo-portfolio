@@ -18,9 +18,13 @@ function normalizeBaseUrl(value) {
 }
 
 function configurationPresence(env) {
+  const gstValue = String(env.AU_GST_REGISTERED || '').trim();
   return {
     database: Boolean(env.DATABASE_URL),
+    stripeApi: Boolean(env.STRIPE_API_KEY),
     stripeWebhook: Boolean(env.STRIPE_WEBHOOK_SECRET),
+    checkoutBaseUrl: Boolean(env.CHECKOUT_BASE_URL),
+    gstRegistrationDeclared: gstValue === 'true' || gstValue === 'false',
     posthog: Boolean(env.POSTHOG_PROJECT_TOKEN),
     revenueSync: Boolean(env.REVENUE_SYNC_TOKEN),
   };
@@ -47,10 +51,15 @@ async function fetchStatus(fetchImpl, url, timeoutMs) {
       }
     }
 
-    return { status: response.status, body };
+    return {
+      status: response.status,
+      allow: response.headers.get('allow') || null,
+      body,
+    };
   } catch (error) {
     return {
       status: null,
+      allow: null,
       error: error && error.name === 'AbortError' ? 'timeout' : 'request_failed',
     };
   } finally {
@@ -59,18 +68,31 @@ async function fetchStatus(fetchImpl, url, timeoutMs) {
 }
 
 async function collectHttpEvidence({ baseUrl, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS }) {
-  const [health, ready, webhook] = await Promise.all([
+  const [health, ready, offers, checkout, webhook] = await Promise.all([
     fetchStatus(fetchImpl, `${baseUrl}/api/health`, timeoutMs),
     fetchStatus(fetchImpl, `${baseUrl}/api/ready`, timeoutMs),
+    fetchStatus(fetchImpl, `${baseUrl}/api/offers`, timeoutMs),
+    fetchStatus(fetchImpl, `${baseUrl}/api/checkout/quick-wins-kit`, timeoutMs),
     fetchStatus(fetchImpl, `${baseUrl}/api/stripe/webhook`, timeoutMs),
   ]);
 
   return {
     health,
     ready,
+    offers: {
+      status: offers.status,
+      catalogReachable: offers.status === 200,
+      offerCount: offers.body && Array.isArray(offers.body.offers) ? offers.body.offers.length : null,
+      error: offers.error || null,
+    },
+    checkout: {
+      status: checkout.status,
+      postOnlyContractObserved: checkout.status === 405 && checkout.allow === 'POST',
+      error: checkout.error || null,
+    },
     webhook: {
       status: webhook.status,
-      postOnlyContractObserved: webhook.status === 405,
+      postOnlyContractObserved: webhook.status === 405 && webhook.allow === 'POST',
       error: webhook.error || null,
     },
   };
@@ -100,7 +122,8 @@ async function collectDatabaseEvidence({ databaseUrl }) {
         to_regclass('public.payment_intents') IS NOT NULL AS payment_intents,
         to_regclass('public.payment_attempts') IS NOT NULL AS payment_attempts,
         to_regclass('public.webhook_receipts') IS NOT NULL AS webhook_receipts,
-        to_regclass('public.paycore_kv') IS NOT NULL AS paycore_kv
+        to_regclass('public.paycore_kv') IS NOT NULL AS paycore_kv,
+        to_regclass('public.idempotency_records') IS NOT NULL AS idempotency_records
     `);
 
     const schema = schemaResult.rows[0] || {};
@@ -108,7 +131,8 @@ async function collectDatabaseEvidence({ databaseUrl }) {
       schema.payment_intents &&
       schema.payment_attempts &&
       schema.webhook_receipts &&
-      schema.paycore_kv
+      schema.paycore_kv &&
+      schema.idempotency_records
     );
     let counts = null;
 
@@ -118,6 +142,7 @@ async function collectDatabaseEvidence({ databaseUrl }) {
           (SELECT count(*)::text FROM public.payment_intents) AS payment_intents,
           (SELECT count(*)::text FROM public.payment_attempts) AS payment_attempts,
           (SELECT count(*)::text FROM public.webhook_receipts) AS webhook_receipts,
+          (SELECT count(*)::text FROM public.idempotency_records WHERE scope='stripe_checkout') AS checkout_idempotency_records,
           (SELECT count(*)::text FROM public.paycore_kv WHERE key LIKE 'analytics:posthog:purchase:%') AS purchase_analytics_checkpoints
       `);
       counts = countResult.rows[0] || null;
@@ -133,6 +158,7 @@ async function collectDatabaseEvidence({ databaseUrl }) {
         paymentAttempts: Boolean(schema.payment_attempts),
         webhookReceipts: Boolean(schema.webhook_receipts),
         paycoreKv: Boolean(schema.paycore_kv),
+        idempotencyRecords: Boolean(schema.idempotency_records),
       },
       counts,
     };
@@ -158,6 +184,8 @@ function evaluateEvidence({ configured, http, database }) {
   const checks = {
     health200: http.health.status === 200,
     ready200: http.ready.status === 200,
+    offerCatalog200: http.offers.catalogReachable === true && http.offers.offerCount === 3,
+    checkoutPostOnly: http.checkout.postOnlyContractObserved === true,
     webhookPostOnly: http.webhook.postOnlyContractObserved === true,
     databaseReachable: database.reachable === true,
     paycoreSchemaReady: database.schemaReady === true,
