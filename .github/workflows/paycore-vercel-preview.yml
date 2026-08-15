@@ -45,6 +45,7 @@ jobs:
             echo "VERCEL_TOKEN is not configured. GitHub-based preview deploy is skipped cleanly; source validation remains covered by PayCore Recovery CI."
             echo "### PayCore Vercel Preview" >> "$GITHUB_STEP_SUMMARY"
             echo "GitHub-based deployment skipped because \`VERCEL_TOKEN\` is not configured." >> "$GITHUB_STEP_SUMMARY"
+            echo "An OAuth-backed direct recovery deployment can be used without exposing a token." >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Link exact PayCore service to existing Vercel project
