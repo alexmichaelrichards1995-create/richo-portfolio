@@ -1,0 +1,80 @@
+name: PayCore Vercel Preview
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/paycore-intake/**'
+      - '.github/workflows/paycore-vercel-preview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paycore-vercel-preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: team_nelzyuU71azKli5ThIr26ppU
+      VERCEL_PROJECT_ID: prj_zrBxApzFOjSTnBHTmsa9P17EHAtf
+      PAYCORE_DIR: services/paycore-intake
+      NEXT_TELEMETRY_DISABLED: '1'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Require Vercel deployment credential
+        shell: bash
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::VERCEL_TOKEN is not configured in GitHub Actions secrets. Add a scoped Vercel token once; this workflow never prints it and never deploys production."
+            exit 1
+          fi
+
+      - name: Link exact PayCore service to existing Vercel project
+        shell: bash
+        run: |
+          mkdir -p "$PAYCORE_DIR/.vercel"
+          printf '{"orgId":"%s","projectId":"%s"}\n' "$VERCEL_ORG_ID" "$VERCEL_PROJECT_ID" > "$PAYCORE_DIR/.vercel/project.json"
+
+      - name: Pull preview project settings
+        shell: bash
+        run: npx --yes vercel@latest pull --yes --environment=preview --token="$VERCEL_TOKEN" --cwd "$PAYCORE_DIR"
+
+      - name: Build exact PayCore service with Vercel
+        shell: bash
+        run: npx --yes vercel@latest build --token="$VERCEL_TOKEN" --cwd "$PAYCORE_DIR"
+
+      - name: Deploy preview only
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="$(npx --yes vercel@latest deploy --prebuilt --token="$VERCEL_TOKEN" --cwd "$PAYCORE_DIR")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "### PayCore Vercel Preview" >> "$GITHUB_STEP_SUMMARY"
+          echo "Preview deployment created from \`$PAYCORE_DIR\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "URL: $url" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Inspect preview deployment
+        shell: bash
+        run: npx --yes vercel@latest inspect "${{ steps.deploy.outputs.url }}" --token="$VERCEL_TOKEN"
+
+      - name: Assert this workflow cannot promote production
+        shell: bash
+        run: |
+          if grep -Eq -- '--prod|deploy +--prod|promote' "$GITHUB_WORKSPACE/.github/workflows/paycore-vercel-preview.yml"; then
+            echo "::error::Production deployment command detected in preview workflow."
+            exit 1
+          fi
+          echo "Preview-only deployment policy verified."
