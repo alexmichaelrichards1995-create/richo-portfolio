@@ -1,7 +1,8 @@
 -- 002_create_paycore_revenue_core.sql
--- Minimal source-controlled PayCore payment truth required by Stripe intake and
--- the one-way PostHog revenue bridge. Production may contain additional PayCore
--- columns/tables; these CREATE IF NOT EXISTS statements are non-destructive.
+-- Minimal source-controlled PayCore payment truth required by Stripe checkout,
+-- Stripe intake, and the one-way PostHog revenue bridge. Production may contain
+-- additional PayCore columns/tables; these CREATE IF NOT EXISTS statements are
+-- non-destructive.
 
 CREATE TABLE IF NOT EXISTS payment_intents (
   id TEXT PRIMARY KEY,
@@ -63,6 +64,15 @@ CREATE TABLE IF NOT EXISTS paycore_kv (
   key TEXT PRIMARY KEY,
   value JSONB NOT NULL,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS idempotency_records (
+  scope TEXT NOT NULL,
+  key TEXT NOT NULL,
+  request_fingerprint CHAR(64),
+  response JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (scope, key)
 );
 
 CREATE INDEX IF NOT EXISTS idx_payment_intents_provider_object
