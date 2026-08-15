@@ -19,11 +19,26 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: paycore_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d paycore_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     defaults:
       run:
         working-directory: services/paycore-intake
     env:
       NEXT_TELEMETRY_DISABLED: '1'
+      TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/paycore_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,6 +46,28 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: services/paycore-intake/package.json
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client
+      - name: Apply recovered PayCore schema
+        run: psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/001_paycore_schema.sql
+      - name: Verify durable payment schema contract
+        run: |
+          psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "
+            SELECT CASE WHEN
+              to_regclass('public.payment_intents') IS NOT NULL AND
+              to_regclass('public.payment_attempts') IS NOT NULL AND
+              to_regclass('public.idempotency_records') IS NOT NULL AND
+              to_regclass('public.webhook_receipts') IS NOT NULL AND
+              to_regclass('public.paycore_kv') IS NOT NULL AND
+              EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema='public' AND table_name='webhook_receipts' AND column_name='payload' AND data_type='jsonb') AND
+              EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='webhook_receipts_pkey') AND
+              EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='payment_attempts_provider_external_id_key')
+            THEN 'PAYCORE_SCHEMA_OK' ELSE 'PAYCORE_SCHEMA_BAD' END;
+          " | grep -qx PAYCORE_SCHEMA_OK
+      - name: Verify schema is idempotent
+        run: psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f sql/001_paycore_schema.sql
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Unit and source-contract tests
