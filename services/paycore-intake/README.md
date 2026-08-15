@@ -16,18 +16,7 @@ PayCore is authoritative for payment state. Checkout redirects and analytics are
 
 Production Neon URLs use `@neondatabase/serverless`. Localhost recovery/CI URLs use the standard `pg` driver through the same tagged-query contract. The local adapter exists to prove the real built Next.js service against ordinary PostgreSQL 16; it does not alter the deployed Neon authority model.
 
-Recovery CI must prove both schema compatibility and real HTTP execution:
-
-1. start a fresh PostgreSQL 16 database;
-2. apply `sql/001_paycore_schema.sql` twice;
-3. pass source/security tests and TypeScript;
-4. complete a real Next.js production build;
-5. start the built server;
-6. reject an unsigned webhook;
-7. accept a correctly HMAC-signed Stripe-style event;
-8. persist exactly one durable receipt;
-9. replay the same event and prove duplicate suppression;
-10. reject any reintroduction of `bootstrap.mjs`.
+Recovery CI proves schema compatibility and real HTTP execution by starting PostgreSQL 16, applying the schema twice, running tests/typecheck/build, starting the built server, rejecting an unsigned webhook, accepting a correctly HMAC-signed Stripe-style event, persisting one durable receipt, replaying the event to prove duplicate suppression, and rejecting any reintroduction of `bootstrap.mjs`.
 
 The signed fixture is an expired Checkout event with no intent metadata, so the expected invariant is exactly one processed webhook receipt and zero fabricated payment intents.
 
