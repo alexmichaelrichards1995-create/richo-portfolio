@@ -21,8 +21,20 @@ async function run() {
         res.end(JSON.stringify({ status: 'ready' }));
         return;
       }
+      if (req.url === '/api/offers') {
+        res.statusCode = 200;
+        res.end(JSON.stringify({ offers: [{}, {}, {}] }));
+        return;
+      }
+      if (req.url === '/api/checkout/quick-wins-kit') {
+        res.statusCode = 405;
+        res.setHeader('allow', 'POST');
+        res.end(JSON.stringify({ error: 'method_not_allowed' }));
+        return;
+      }
       if (req.url === '/api/stripe/webhook') {
         res.statusCode = 405;
+        res.setHeader('allow', 'POST');
         res.end(JSON.stringify({ error: 'method_not_allowed' }));
         return;
       }
@@ -38,7 +50,10 @@ async function run() {
     const port = server.address().port;
     const secrets = {
       DATABASE_URL: 'postgres://user:super-secret-db@db.example.test/paycore',
+      STRIPE_API_KEY: 'sk_test_super_secret',
       STRIPE_WEBHOOK_SECRET: 'whsec_super_secret',
+      CHECKOUT_BASE_URL: 'https://richosystems.technology',
+      AU_GST_REGISTERED: 'false',
       POSTHOG_PROJECT_TOKEN: 'phc_super_secret',
       REVENUE_SYNC_TOKEN: 'sync_super_secret',
       PAYCORE_BASE_URL: `http://127.0.0.1:${port}`,
@@ -56,11 +71,13 @@ async function run() {
           paymentAttempts: true,
           webhookReceipts: true,
           paycoreKv: true,
+          idempotencyRecords: true,
         },
         counts: {
           payment_intents: '0',
           payment_attempts: '0',
           webhook_receipts: '0',
+          checkout_idempotency_records: '0',
           purchase_analytics_checkpoints: '0',
         },
       }),
@@ -69,11 +86,17 @@ async function run() {
     assert.strictEqual(evidence.gate.readyForSignedTest, true);
     assert.strictEqual(evidence.http.health.status, 200);
     assert.strictEqual(evidence.http.ready.status, 200);
+    assert.strictEqual(evidence.http.offers.catalogReachable, true);
+    assert.strictEqual(evidence.http.offers.offerCount, 3);
+    assert.strictEqual(evidence.http.checkout.status, 405);
+    assert.strictEqual(evidence.http.checkout.postOnlyContractObserved, true);
     assert.strictEqual(evidence.http.webhook.status, 405);
+    assert.strictEqual(evidence.http.webhook.postOnlyContractObserved, true);
     assert.strictEqual(evidence.database.schemaReady, true);
 
     const serialized = JSON.stringify(evidence);
     assert.ok(!serialized.includes('super-secret-db'));
+    assert.ok(!serialized.includes('sk_test_super_secret'));
     assert.ok(!serialized.includes('whsec_super_secret'));
     assert.ok(!serialized.includes('phc_super_secret'));
     assert.ok(!serialized.includes('sync_super_secret'));
@@ -81,7 +104,10 @@ async function run() {
     const failedGate = evaluateEvidence({
       configured: {
         database: true,
+        stripeApi: true,
         stripeWebhook: true,
+        checkoutBaseUrl: true,
+        gstRegistrationDeclared: true,
         posthog: true,
         revenueSync: false,
       },
