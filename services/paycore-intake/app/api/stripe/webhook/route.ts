@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { database, json, PayCoreError, requireWebhookEnv, sha256, stripeClient } from "@/lib/runtime";
+import { assertStripeAccount, database, json, PayCoreError, requireWebhookEnv, sha256, stripeClient } from "@/lib/runtime";
 import { processStripeEvent } from "@/lib/webhook";
 
 export const runtime = "nodejs";
@@ -32,6 +32,9 @@ export async function POST(request: Request) {
       return json({ received: false, error: "invalid_webhook_signature", request_id: requestId }, { status: 400 });
     }
 
+    // Avoid account API calls for untrusted payloads: verify the signature first,
+    // then enforce the optional account pin before any Stripe hydration/processing.
+    await assertStripeAccount(env.STRIPE_SECRET_KEY, env.STRIPE_EXPECTED_ACCOUNT_ID);
     const outcome = await processStripeEvent({
       stripe,
       sql: database(env.DATABASE_URL),
