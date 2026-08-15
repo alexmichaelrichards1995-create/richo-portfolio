@@ -29,7 +29,7 @@ Recovery CI must prove both schema compatibility and real HTTP execution:
 9. replay the same event and prove duplicate suppression;
 10. reject any reintroduction of `bootstrap.mjs`.
 
-This gate passed on PayCore Recovery CI #40 after the portable PostgreSQL transport was added. The signed fixture was an expired Checkout event with no intent metadata, so the expected invariant is exactly one processed webhook receipt and zero fabricated payment intents.
+The signed fixture is an expired Checkout event with no intent metadata, so the expected invariant is exactly one processed webhook receipt and zero fabricated payment intents.
 
 ## Required secure runtime configuration
 
