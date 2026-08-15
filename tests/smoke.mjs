@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const requiredFiles = ['index.html', 'styles.css', 'catalog.js', 'analytics.js', 'app.js', 'assets/logo.svg'];
+const requiredFiles = ['index.html', 'styles.css', 'catalog.js', 'analytics.js', 'checkout.js', 'app.js', 'assets/logo.svg'];
 const failures = [];
 
 for (const file of requiredFiles) {
@@ -11,6 +11,11 @@ if (fs.existsSync('index.html')) {
   const html = fs.readFileSync('index.html', 'utf8');
   const requiredTokens = [
     'R.I.C.H.O. Product Runtime Hub',
+    'id="start-here"',
+    'data-richo-checkout-sku="quick-wins-kit"',
+    'data-richo-checkout-sku="ai-quick-fix"',
+    'data-richo-checkout-sku="ai-quick-fix-session"',
+    'id="checkout-status"',
     'id="catalog"',
     'id="catalog-product"',
     'id="governance-tool"',
@@ -18,6 +23,7 @@ if (fs.existsSync('index.html')) {
     'id="diligence-tool"',
     'script src="catalog.js"',
     'script src="analytics.js"',
+    'script src="checkout.js"',
     'script src="app.js"',
     'anonymous usage events',
     'https://richosystems.technology/'
@@ -60,6 +66,24 @@ if (fs.existsSync('analytics.js')) {
   }
 }
 
+if (fs.existsSync('checkout.js')) {
+  const checkout = fs.readFileSync('checkout.js', 'utf8');
+  for (const token of [
+    '[data-richo-checkout-sku]',
+    "method: 'POST'",
+    "'Idempotency-Key'",
+    'encodeURIComponent(sku)',
+    'checkout.stripe.com',
+    "track('richo_checkout_started'",
+    "credentials: 'same-origin'",
+    "cache: 'no-store'"
+  ]) {
+    if (!checkout.includes(token)) failures.push(`checkout.js missing checkout control: ${token}`);
+  }
+  if (/\bbody\s*:/.test(checkout)) failures.push('checkout.js must not send a browser-authored request body');
+  if (/unit_amount|amountMinor\s*[:=]\s*[0-9]/.test(checkout)) failures.push('checkout.js must not own checkout pricing');
+}
+
 if (fs.existsSync('app.js')) {
   const js = fs.readFileSync('app.js', 'utf8');
   for (const key of ['governance', 'pilot', 'diligence']) {
@@ -87,4 +111,4 @@ if (failures.length) {
 }
 
 console.log('R.I.C.H.O. smoke test PASSED');
-console.log('Verified 6 required files, 53 RSP catalogue entries, family gates, 3 flagship engines and privacy-safe analytics controls.');
+console.log('Verified 7 required files, 3 entry checkout offers, 53 RSP catalogue entries, family gates, 3 flagship engines and privacy-safe analytics controls.');
