@@ -7,6 +7,31 @@
 
   const safeText = value => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 120);
 
+  function stripCheckoutIdentifiersFromUrl() {
+    let url;
+    try {
+      url = new URL(window.location.href);
+    } catch (_) {
+      return;
+    }
+
+    let changed = false;
+    for (const key of ['session_id', 'intent_id', 'payment_intent', 'client_secret']) {
+      if (url.searchParams.has(key)) {
+        url.searchParams.delete(key);
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
+    }
+  }
+
+  // Stripe return URLs may contain opaque payment/session identifiers. Remove
+  // them before PostHog's automatic page-view capture can observe the URL.
+  stripCheckoutIdentifiersFromUrl();
+
   function installPostHogQueue() {
     if (window.posthog?.capture) return window.posthog;
 
