@@ -16,6 +16,11 @@ function metadata(meta: Stripe.Metadata | null | undefined, key: string): string
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+// A healthy webhook invocation should complete in seconds. If a worker dies after
+// the durable claim but before completion, Stripe redelivery may reclaim that
+// event only after this deliberately conservative stale-processing window.
+export const WEBHOOK_CLAIM_STALE_MINUTES = 10;
+
 export async function claimEvent(sql: SqlClient, event: Stripe.Event, bodyHash: string): Promise<boolean> {
   const rows = await sql`
     INSERT INTO webhook_receipts (provider, event_id, status, kind, payload)
@@ -28,9 +33,14 @@ export async function claimEvent(sql: SqlClient, event: Stripe.Event, bodyHash: 
     })}::jsonb)
     ON CONFLICT (provider, event_id) DO UPDATE
       SET status = 'processing', kind = EXCLUDED.kind, last_error = NULL,
-          payload = COALESCE(webhook_receipts.payload, '{}'::jsonb) || EXCLUDED.payload,
+          payload = COALESCE(webhook_receipts.payload, '{}'::jsonb) || EXCLUDED.payload ||
+            jsonb_build_object('reclaimed_at', now()),
           updated_at = now()
       WHERE webhook_receipts.status = 'failed'
+         OR (
+           webhook_receipts.status = 'processing'
+           AND webhook_receipts.updated_at < now() - interval '10 minutes'
+         )
     RETURNING event_id
   ` as unknown as Array<{ event_id: string }>;
   return rows.length === 1;
