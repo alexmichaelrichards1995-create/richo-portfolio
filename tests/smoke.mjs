@@ -56,9 +56,21 @@ if (fs.existsSync('analytics.js')) {
     "person_profiles: 'identified_only'",
     'autocapture: false',
     'disable_session_recording: true',
-    'respect_dnt: true'
+    'respect_dnt: true',
+    'stripCheckoutIdentifiersFromUrl',
+    "'session_id'",
+    "'intent_id'",
+    "'payment_intent'",
+    "'client_secret'",
+    'history.replaceState'
   ]) {
-    if (!analytics.includes(token)) failures.push(`analytics.js missing telemetry control: ${token}`);
+    if (!analytics.includes(token)) failures.push(`analytics.js missing telemetry/privacy control: ${token}`);
+  }
+
+  const stripIndex = analytics.indexOf('stripCheckoutIdentifiersFromUrl();');
+  const initIndex = analytics.indexOf('posthog.init(');
+  if (stripIndex < 0 || initIndex < 0 || stripIndex > initIndex) {
+    failures.push('Checkout identifiers must be stripped before PostHog initialization');
   }
 
   for (const forbidden of ['checkbox_value', 'evidence_gap_text', 'readiness_score']) {
@@ -75,6 +87,8 @@ if (fs.existsSync('checkout.js')) {
     'encodeURIComponent(sku)',
     'checkout.stripe.com',
     "track('richo_checkout_started'",
+    "track('richo_checkout_returned'",
+    'this page alone does not confirm a completed sale',
     "credentials: 'same-origin'",
     "cache: 'no-store'"
   ]) {
@@ -111,4 +125,4 @@ if (failures.length) {
 }
 
 console.log('R.I.C.H.O. smoke test PASSED');
-console.log('Verified 7 required files, 3 entry checkout offers, 53 RSP catalogue entries, family gates, 3 flagship engines and privacy-safe analytics controls.');
+console.log('Verified 7 required files, 3 entry checkout offers, 53 RSP catalogue entries, return-URL privacy, family gates, 3 flagship engines and privacy-safe analytics controls.');
