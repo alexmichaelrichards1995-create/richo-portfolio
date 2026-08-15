@@ -17,6 +17,7 @@ CREATE TABLE IF NOT EXISTS payment_intents (
   billing_type TEXT NOT NULL,
   state TEXT NOT NULL,
   provider TEXT,
+  livemode BOOLEAN,
   provider_object_id TEXT,
   provider_payment_intent_id TEXT,
   encrypted_customer JSONB,
@@ -30,6 +31,12 @@ CREATE TABLE IF NOT EXISTS payment_intents (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   succeeded_at TIMESTAMPTZ
 );
+
+-- Existing PayCore installations may predate this source-controlled column.
+-- NULL is deliberately fail-closed: only explicitly live payments may be
+-- exported as real revenue.
+ALTER TABLE payment_intents
+  ADD COLUMN IF NOT EXISTS livemode BOOLEAN;
 
 CREATE TABLE IF NOT EXISTS payment_attempts (
   id TEXT PRIMARY KEY,

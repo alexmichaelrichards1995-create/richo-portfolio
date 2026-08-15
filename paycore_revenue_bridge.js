@@ -16,6 +16,7 @@ function deterministicUuid(input) {
 
 function normalizeSucceededIntent(row) {
   if (!row || !row.id || !row.succeeded_at) return null;
+  if (row.livemode !== true) return null;
 
   const amountMinor = Number(row.amount_minor);
   if (!Number.isSafeInteger(amountMinor) || amountMinor <= 0) return null;
@@ -62,9 +63,10 @@ class PgPayCoreRevenueStore {
   async listSucceeded(limit = 100) {
     const bounded = Math.max(1, Math.min(Number(limit) || 100, 100));
     const result = await this.pool.query(
-      `SELECT id, sku, product_name, amount_minor, currency, provider, succeeded_at
+      `SELECT id, sku, product_name, amount_minor, currency, provider, livemode, succeeded_at
        FROM payment_intents
        WHERE succeeded_at IS NOT NULL
+         AND livemode IS TRUE
          AND amount_minor > 0
        ORDER BY succeeded_at ASC, id ASC
        LIMIT $1`,

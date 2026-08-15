@@ -71,13 +71,15 @@ async function run() {
     assert.strictEqual(first.intentId, intentId);
 
     const intent = await pool.query(
-      `SELECT state, provider_object_id, provider_payment_intent_id, succeeded_at
+      `SELECT state, provider_object_id, provider_payment_intent_id, livemode, fulfilment_state, succeeded_at
        FROM payment_intents WHERE id = $1`,
       [intentId],
     );
     assert.strictEqual(intent.rows[0].state, 'succeeded');
     assert.strictEqual(intent.rows[0].provider_object_id, sessionId);
     assert.strictEqual(intent.rows[0].provider_payment_intent_id, paymentIntentId);
+    assert.strictEqual(intent.rows[0].livemode, false);
+    assert.strictEqual(intent.rows[0].fulfilment_state, 'pending');
     assert.ok(intent.rows[0].succeeded_at);
 
     const receipt = await pool.query(

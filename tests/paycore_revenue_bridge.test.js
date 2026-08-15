@@ -39,6 +39,7 @@ async function run() {
     amount_minor: '19900',
     currency: 'aud',
     provider: 'stripe',
+    livemode: true,
     succeeded_at: '2026-08-15T00:00:00.000Z',
     encrypted_customer: { should_not: 'leave_paycore' },
   };
@@ -66,6 +67,8 @@ async function run() {
   assert.strictEqual(normalizeSucceededIntent({ ...goodRow, succeeded_at: null }), null);
   assert.strictEqual(normalizeSucceededIntent({ ...goodRow, amount_minor: 0 }), null);
   assert.strictEqual(normalizeSucceededIntent({ ...goodRow, currency: 'AU' }), null);
+  assert.strictEqual(normalizeSucceededIntent({ ...goodRow, livemode: false }), null);
+  assert.strictEqual(normalizeSucceededIntent({ ...goodRow, livemode: null }), null);
 
   const captured = [];
   const store = new FakeStore([

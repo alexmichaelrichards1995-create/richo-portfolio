@@ -148,12 +148,13 @@ async function processVerifiedStripeSuccess(payment, { pool: injectedPool } = {}
       `UPDATE payment_intents
        SET state = 'succeeded',
            provider = 'stripe',
+           livemode = $5,
            provider_object_id = COALESCE(provider_object_id, $2),
            provider_payment_intent_id = COALESCE(provider_payment_intent_id, $3),
            succeeded_at = COALESCE(succeeded_at, $4::timestamptz),
            updated_at = now()
        WHERE id = $1`,
-      [intent.id, payment.checkoutSessionId, payment.paymentIntentId, payment.paidAt],
+      [intent.id, payment.checkoutSessionId, payment.paymentIntentId, payment.paidAt, payment.livemode],
     );
 
     await client.query(

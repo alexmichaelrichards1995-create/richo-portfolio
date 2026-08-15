@@ -22,6 +22,7 @@ async function run() {
         amount_minor bigint NOT NULL,
         currency char(3) NOT NULL,
         provider text,
+        livemode boolean,
         succeeded_at timestamptz
       ) ON COMMIT PRESERVE ROWS
     `);
@@ -34,8 +35,8 @@ async function run() {
     `);
 
     await client.query(
-      `INSERT INTO payment_intents (id, sku, product_name, amount_minor, currency, provider, succeeded_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      `INSERT INTO payment_intents (id, sku, product_name, amount_minor, currency, provider, livemode, succeeded_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
       [
         'intent_pg_1',
         'RICH-199',
@@ -43,8 +44,14 @@ async function run() {
         19900,
         'AUD',
         'stripe',
+        true,
         '2026-08-15T00:10:00.000Z',
       ],
+    );
+
+    await client.query(
+      `INSERT INTO payment_intents (id, sku, product_name, amount_minor, currency, provider, livemode, succeeded_at)
+       VALUES ('intent_pg_test', 'RICH-TEST', 'Sandbox purchase', 100, 'AUD', 'stripe', false, now())`,
     );
 
     const captured = [];
