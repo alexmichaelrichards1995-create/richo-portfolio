@@ -2,6 +2,23 @@ name: PayCore Vercel Build Gate
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - 'scripts/**'
+      - 'migrations/**'
+      - 'tests/**'
+      - 'paycore_*.js'
+      - 'stripe_payment_webhook.js'
+      - 'posthog_server.js'
+      - 'index.html'
+      - 'checkout.js'
+      - 'analytics.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vercel.json'
+      - '.github/workflows/paycore-vercel-build.yml'
 
 permissions:
   contents: read
@@ -49,7 +66,7 @@ jobs:
           npx --yes vercel@${VERCEL_CLI_VERSION} pull \
             --yes \
             --environment=preview \
-            --git-branch="${GITHUB_REF_NAME}" \
+            --git-branch="${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}" \
             --token="$VERCEL_TOKEN"
 
       - name: Build preview artifact only
