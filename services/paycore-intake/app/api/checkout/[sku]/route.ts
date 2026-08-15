@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { checkoutBodySchema, createCheckout } from "@/lib/checkout";
-import { database, json, PayCoreError, productFor, requireCheckoutEnv, sha256, stripeClient, trustedOrigins, validIdempotencyKey } from "@/lib/runtime";
+import { assertStripeAccount, database, json, PayCoreError, productFor, requireCheckoutEnv, sha256, stripeClient, trustedOrigins, validIdempotencyKey } from "@/lib/runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,8 +45,11 @@ export async function POST(request: Request, context: { params: Promise<{ sku: s
     if (suppliedKey && !key) throw new PayCoreError("invalid_idempotency_key", { httpStatus: 400 });
     const idempotencyKey = key ?? `server-${crypto.randomUUID()}`;
 
+    // If an account pin is configured, enforce it on the actual payment path.
+    await assertStripeAccount(env.STRIPE_SECRET_KEY, env.STRIPE_EXPECTED_ACCOUNT_ID);
+    const stripe = stripeClient(env.STRIPE_SECRET_KEY);
     const result = await createCheckout({
-      stripe: stripeClient(env.STRIPE_SECRET_KEY),
+      stripe,
       sql: database(env.DATABASE_URL),
       product,
       body,
