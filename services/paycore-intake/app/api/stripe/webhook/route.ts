@@ -48,7 +48,15 @@ export async function POST(request: Request) {
   } catch (error) {
     const code = error instanceof PayCoreError ? error.code : "webhook_processing_error";
     const retryable = !(error instanceof PayCoreError) || error.retryable;
-    console.error("paycore_webhook_failed", { request_id: requestId, code, retryable });
+    const diagnostic = error && typeof error === "object" ? error as { name?: unknown; code?: unknown; message?: unknown } : {};
+    console.error("paycore_webhook_failed", {
+      request_id: requestId,
+      code,
+      retryable,
+      error_class: typeof diagnostic.name === "string" ? diagnostic.name : "unknown",
+      database_code: typeof diagnostic.code === "string" ? diagnostic.code : null,
+      error_message: typeof diagnostic.message === "string" ? diagnostic.message.slice(0, 240) : null,
+    });
     return json({ received: false, error: code, retryable, request_id: requestId }, { status: retryable ? 500 : (error instanceof PayCoreError ? error.httpStatus : 500) });
   }
 }
