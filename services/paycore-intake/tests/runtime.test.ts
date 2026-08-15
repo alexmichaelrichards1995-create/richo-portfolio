@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   checkoutConfigured,
   configured,
@@ -11,6 +12,9 @@ import {
   validIdempotencyKey,
   webhookConfigured,
 } from "../lib/runtime";
+
+const testDirectory = path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(testDirectory, "..");
 
 test("canonical public prices remain server-owned", () => {
   assert.equal(productFor("RSP-056").amountMinor, 1900);
@@ -62,20 +66,40 @@ test("trusted origins normalize and reject malformed optional values", () => {
 });
 
 test("production build is transparent and cannot depend on bootstrap.mjs", () => {
-  const root = path.resolve(import.meta.dirname, "..");
   const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
   assert.equal(pkg.version, "2.2.1");
   assert.ok(!String(pkg.scripts.build).includes("bootstrap.mjs"));
   assert.equal(fs.existsSync(path.join(root, "bootstrap.mjs")), false);
 });
 
-test("webhook route verifies Stripe signature before processing", () => {
-  const root = path.resolve(import.meta.dirname, "..");
+test("webhook route verifies Stripe signature before account pin and processing", () => {
   const source = fs.readFileSync(path.join(root, "app/api/stripe/webhook/route.ts"), "utf8");
   const rawIndex = source.indexOf("request.text()");
   const verifyIndex = source.indexOf("constructEvent");
+  const accountPinIndex = source.indexOf("await assertStripeAccount(");
   const processIndex = source.indexOf("await processStripeEvent(");
-  assert.ok(rawIndex >= 0 && verifyIndex > rawIndex && processIndex > verifyIndex);
+  assert.ok(rawIndex >= 0 && verifyIndex > rawIndex && accountPinIndex > verifyIndex && processIndex > accountPinIndex);
   assert.match(source, /missing_stripe_signature/);
   assert.match(source, /invalid_webhook_signature/);
+});
+
+test("checkout enforces optional Stripe account pin before creating Checkout", () => {
+  const source = fs.readFileSync(path.join(root, "app/api/checkout/[sku]/route.ts"), "utf8");
+  const accountPinIndex = source.indexOf("await assertStripeAccount(");
+  const checkoutIndex = source.indexOf("await createCheckout(");
+  assert.ok(accountPinIndex >= 0 && checkoutIndex > accountPinIndex);
+});
+
+test("webhook claim can recover a stale processing receipt", () => {
+  const source = fs.readFileSync(path.join(root, "lib/webhook.ts"), "utf8");
+  assert.match(source, /webhook_receipts\.status = 'processing'/);
+  assert.match(source, /updated_at < now\(\) - interval '10 minutes'/);
+  assert.match(source, /reclaimed_at/);
+});
+
+test("health readiness checks PayCore schema rather than connectivity alone", () => {
+  const source = fs.readFileSync(path.join(root, "app/api/health/route.ts"), "utf8");
+  assert.match(source, /inspectDatabase/);
+  assert.match(source, /database_schema_ready/);
+  assert.match(source, /database\.schemaReady/);
 });
