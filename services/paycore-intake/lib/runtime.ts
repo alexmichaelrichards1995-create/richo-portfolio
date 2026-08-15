@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { neon } from "@neondatabase/serverless";
+import { Pool } from "pg";
 import Stripe from "stripe";
 import { z } from "zod";
 
@@ -18,7 +19,82 @@ const envSchema = z.object({
 });
 
 export type RuntimeEnv = z.infer<typeof envSchema>;
-export type SqlClient = ReturnType<typeof neon>;
+
+export type SqlClient = {
+  <T = unknown[]>(strings: TemplateStringsArray, ...values: unknown[]): PromiseLike<T>;
+  transaction(queries: readonly PromiseLike<unknown>[]): Promise<unknown[]>;
+};
+
+type DeferredPgQuery = PromiseLike<unknown> & {
+  readonly __paycore_pg_query: true;
+  readonly text: string;
+  readonly values: unknown[];
+};
+
+const pgPools = new Map<string, Pool>();
+
+function pgPool(url: string): Pool {
+  const existing = pgPools.get(url);
+  if (existing) return existing;
+  const pool = new Pool({ connectionString: url, max: 4, idleTimeoutMillis: 10_000, connectionTimeoutMillis: 5_000 });
+  pgPools.set(url, pool);
+  return pool;
+}
+
+function portablePostgres(url: string): SqlClient {
+  const pool = pgPool(url);
+  const sql = ((strings: TemplateStringsArray, ...rawValues: unknown[]) => {
+    const values = rawValues.map((value) => value === undefined ? null : value);
+    let text = strings[0] ?? "";
+    for (let index = 0; index < values.length; index += 1) {
+      text += `$${index + 1}${strings[index + 1] ?? ""}`;
+    }
+
+    const query: DeferredPgQuery = {
+      __paycore_pg_query: true,
+      text,
+      values,
+      then(onfulfilled, onrejected) {
+        return pool.query(text, values).then((result) => result.rows).then(onfulfilled, onrejected);
+      },
+    };
+    return query;
+  }) as SqlClient;
+
+  sql.transaction = async (queries) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const results: unknown[] = [];
+      for (const query of queries) {
+        if (!(query && typeof query === "object" && "__paycore_pg_query" in query)) {
+          throw new Error("portable_postgres_transaction_requires_deferred_queries");
+        }
+        const deferred = query as DeferredPgQuery;
+        const result = await client.query(deferred.text, deferred.values);
+        results.push(result.rows);
+      }
+      await client.query("COMMIT");
+      return results;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  };
+
+  return sql;
+}
+
+function isLocalDatabaseUrl(url: string): boolean {
+  try {
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostname === "127.0.0.1" || hostname === "localhost" || hostname === "::1";
+  } catch {
+    return false;
+  }
+}
 
 export class PayCoreError extends Error {
   readonly code: string;
@@ -96,7 +172,8 @@ export function requireWebhookEnv(env = readRuntimeEnv()) {
 }
 
 export function database(url: string): SqlClient {
-  return neon(url, { fullResults: false });
+  if (isLocalDatabaseUrl(url)) return portablePostgres(url);
+  return neon(url, { fullResults: false }) as unknown as SqlClient;
 }
 
 export type DatabaseStatus = {
@@ -109,7 +186,7 @@ export type DatabaseStatus = {
 export async function inspectDatabase(url: string): Promise<DatabaseStatus> {
   try {
     const sql = database(url);
-    const rows = await sql`
+    const rows = await sql<Array<Record<string, boolean>>>`
       SELECT
         to_regclass('public.payment_intents') IS NOT NULL AS payment_intents,
         to_regclass('public.payment_attempts') IS NOT NULL AS payment_attempts,
@@ -123,7 +200,7 @@ export async function inspectDatabase(url: string): Promise<DatabaseStatus> {
              AND column_name = 'payload'
              AND data_type = 'jsonb'
         ) AS webhook_payload
-    ` as unknown as Array<Record<string, boolean>>;
+    `;
     const row = rows[0] ?? {};
     const missingTables = REQUIRED_DATABASE_TABLES.filter((table) => row[table] !== true);
     const webhookPayloadColumn = row.webhook_payload === true;
