@@ -43,14 +43,14 @@ function pgPool(url: string): Pool {
 
 function portablePostgres(url: string): SqlClient {
   const pool = pgPool(url);
-  const sql = ((strings: TemplateStringsArray, ...rawValues: unknown[]) => {
+  const tag = (strings: TemplateStringsArray, ...rawValues: unknown[]): DeferredPgQuery => {
     const values = rawValues.map((value) => value === undefined ? null : value);
     let text = strings[0] ?? "";
     for (let index = 0; index < values.length; index += 1) {
       text += `$${index + 1}${strings[index + 1] ?? ""}`;
     }
 
-    const query: DeferredPgQuery = {
+    return {
       __paycore_pg_query: true,
       text,
       values,
@@ -58,9 +58,9 @@ function portablePostgres(url: string): SqlClient {
         return pool.query(text, values).then((result) => result.rows).then(onfulfilled, onrejected);
       },
     };
-    return query;
-  }) as SqlClient;
+  };
 
+  const sql = tag as unknown as SqlClient;
   sql.transaction = async (queries) => {
     const client = await pool.connect();
     try {
