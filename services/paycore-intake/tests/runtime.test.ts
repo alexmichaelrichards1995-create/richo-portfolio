@@ -74,7 +74,7 @@ test("webhook route verifies Stripe signature before processing", () => {
   const source = fs.readFileSync(path.join(root, "app/api/stripe/webhook/route.ts"), "utf8");
   const rawIndex = source.indexOf("request.text()");
   const verifyIndex = source.indexOf("constructEvent");
-  const processIndex = source.indexOf("processStripeEvent");
+  const processIndex = source.indexOf("await processStripeEvent(");
   assert.ok(rawIndex >= 0 && verifyIndex > rawIndex && processIndex > verifyIndex);
   assert.match(source, /missing_stripe_signature/);
   assert.match(source, /invalid_webhook_signature/);
