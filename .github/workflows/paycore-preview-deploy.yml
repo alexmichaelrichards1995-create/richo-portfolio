@@ -106,7 +106,7 @@ jobs:
         env:
           DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-        run: npx vercel@58.1.0 logs --deployment "$DEPLOYMENT_URL" --level error --limit 50 --token "$VERCEL_TOKEN" || true
+        run: npx vercel@58.1.0 logs --deployment "$DEPLOYMENT_URL" --level error --limit 50 --token "$VERCEL_TOKEN"
 
       - name: Record deployment evidence
         shell: bash
