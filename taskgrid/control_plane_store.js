@@ -16,13 +16,18 @@ class ControlPlaneStore {
   async metrics(...args) { return this.durable.metrics(...args); }
 
   async updateTask(taskId, patch) {
+    let notionPageId = null;
+    if (this.notion) {
+      const tasksBeforeUpdate = await this.durable.listTasks();
+      const current = tasksBeforeUpdate.find(t => String(t.TaskID) === String(taskId));
+      notionPageId = current?.NotionPageID || null;
+    }
+
     await this.durable.updateTask(taskId, patch);
-    if (!this.notion) return;
-    const tasks = await this.durable.listTasks();
-    const task = tasks.find(t => String(t.TaskID) === String(taskId));
-    if (!task?.NotionPageID) return;
+    if (!this.notion || !notionPageId) return;
+
     try {
-      await this.notion.updateTaskPage(task.NotionPageID, patch);
+      await this.notion.updateTaskPage(notionPageId, patch);
     } catch (err) {
       // Notion is the human control plane, not the lease authority. A failed mirror
       // must not roll back an already durable task-state transition.
