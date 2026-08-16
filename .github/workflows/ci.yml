@@ -1,10 +1,25 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - main
+      - richo-systems-upgrade-2026-08-17
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    name: runtime-and-integration-tests
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     services:
       postgres:
         image: postgres:15
@@ -14,18 +29,27 @@ jobs:
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
-    strategy:
-      matrix:
-        node-version: [18.x]
-    steps:
-      - uses: actions/checkout@v4
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
-      - name: Use Node.js
+    env:
+      DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
+      GITHUB_WEBHOOK_SECRET: ci-webhook-secret-not-for-production
+      # Deliberately omit STRIPE_API_KEY so Stripe Connect integration tests use the repository's stub path.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: '22'
 
-      - name: Install system deps (psql)
+      - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Install dependencies
@@ -36,30 +60,36 @@ jobs:
             npm install
           fi
 
-      - name: Wait for Postgres
+      - name: Install PayCore reconstruction dependencies
+        run: |
+          if [ -f paycore-reconstruction/package-lock.json ]; then
+            npm ci --prefix paycore-reconstruction
+          else
+            npm install --prefix paycore-reconstruction
+          fi
+
+      - name: Build PayCore reconstruction
+        env:
+          PAYMENT_MODE: sandbox
+          LIVE_MONEY: 'false'
+          CHECKOUT_ENABLED: 'false'
+          PAYMENT_LINKS_CONFIGURED: 'false'
+        run: npm run build --prefix paycore-reconstruction
+
+      - name: Wait for PostgreSQL
         env:
           PGPASSWORD: postgres
         run: |
-          until pg_isready -h localhost -p 5432 -U postgres -d postgres; do sleep 1; done
+          until pg_isready -h 127.0.0.1 -p 5432 -U postgres -d postgres; do sleep 1; done
 
-      - name: Run migrations
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
+      - name: Apply migrations
+        run: psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
 
-      - name: Set secrets for tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-        run: echo "secrets set"
+      - name: Run complete deterministic test suite
+        run: npm test
 
-      - name: Run tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          node tests/marketplace_webhook_handler.test.js
-          node tests/marketplace_webhook_handler.idempotency.test.js
-          node tests/webhook_signature.integration.test.js
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit PayCore reconstruction dependencies
+        run: npm audit --prefix paycore-reconstruction --omit=dev --audit-level=high

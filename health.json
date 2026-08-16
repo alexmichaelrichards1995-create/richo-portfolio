@@ -1,0 +1,12 @@
+{
+  "service": "richo-product-runtime-hub",
+  "status": "ok",
+  "schema": 1,
+  "environment": "static-runtime",
+  "checks": {
+    "runtime": "available",
+    "catalogue": "RSP-001-RSP-053",
+    "external_actions": "blocked",
+    "human_approval": "required"
+  }
+}

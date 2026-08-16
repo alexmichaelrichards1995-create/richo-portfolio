@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 
-const requiredFiles = ['index.html', 'styles.css', 'catalog.js', 'app.js', 'assets/logo.svg'];
+const requiredFiles = ['index.html', 'styles.css', 'catalog.js', 'app.js', 'telemetry.js', 'health.json', 'assets/logo.svg'];
 const failures = [];
 
 for (const file of requiredFiles) {
@@ -18,6 +18,8 @@ if (fs.existsSync('index.html')) {
     'id="diligence-tool"',
     'script src="catalog.js"',
     'script src="app.js"',
+    'script src="telemetry.js"',
+    'meta name="posthog-key"',
     'https://richosystems.technology/'
   ];
   for (const token of requiredTokens) {
@@ -26,6 +28,31 @@ if (fs.existsSync('index.html')) {
   for (const placeholder of ['Your Company', 'yourdomain.example', 'your-form-id', 'contact@yourcompany.example']) {
     if (html.includes(placeholder)) failures.push(`Placeholder remains in index.html: ${placeholder}`);
   }
+}
+
+if (fs.existsSync('health.json')) {
+  try {
+    const health = JSON.parse(fs.readFileSync('health.json', 'utf8'));
+    if (health.status !== 'ok') failures.push('health.json status must be ok');
+    if (health.service !== 'richo-product-runtime-hub') failures.push('health.json service identifier is incorrect');
+  } catch (error) {
+    failures.push(`health.json is invalid JSON: ${error.message}`);
+  }
+}
+
+if (fs.existsSync('vercel.json')) {
+  const vercel = fs.readFileSync('vercel.json', 'utf8');
+  if (!vercel.includes('"/health"')) failures.push('vercel.json missing /health route');
+  if (!vercel.includes('/health.json')) failures.push('vercel.json missing health.json destination');
+}
+
+if (fs.existsSync('telemetry.js')) {
+  const telemetry = fs.readFileSync('telemetry.js', 'utf8');
+  for (const token of ['richo_smoke_test', '$pageview', 'offer_viewed', 'readiness_assessment_started']) {
+    if (!telemetry.includes(token)) failures.push(`telemetry.js missing event: ${token}`);
+  }
+  if (!telemetry.includes('disable_session_recording: true')) failures.push('telemetry.js must keep session recording disabled');
+  if (!telemetry.includes('autocapture: false')) failures.push('telemetry.js must keep autocapture disabled');
 }
 
 if (fs.existsSync('catalog.js')) {
@@ -59,4 +86,4 @@ if (failures.length) {
 }
 
 console.log('R.I.C.H.O. smoke test PASSED');
-console.log('Verified 5 required files, 53 RSP catalogue entries, family gates and 3 flagship engines.');
+console.log('Verified runtime files, /health routing, privacy-minimal telemetry, 53 RSP catalogue entries, family gates and 3 flagship engines.');

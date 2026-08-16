@@ -1,0 +1,17 @@
+{
+  "name": "richo-paycore-reconstruction",
+  "version": "3.0.0-reconstruction.1",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "test": "node test/contract-local.mjs"
+  },
+  "dependencies": {
+    "next": "16.3.0",
+    "pg": "^8.11.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

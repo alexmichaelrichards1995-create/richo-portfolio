@@ -1,0 +1,148 @@
+name: PayCore Preview Deploy
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paycore-preview-deploy
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: team_nelzyuU71azKli5ThIr26ppU
+  VERCEL_PROJECT_ID: prj_FLgF3j6ty9VSSImjvT8hoKAeK8Bs
+
+jobs:
+  deploy-preview:
+    name: deploy-paycore-reconstruction-preview
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: paycore-reconstruction
+
+    steps:
+      - name: Checkout exact workflow commit
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Refuse unsafe production branch invocation
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            echo "Refusing preview deployment from main. Run this workflow from the upgrade branch only."
+            exit 1
+          fi
+
+      - name: Verify required preview secrets exist
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PAYCORE_PREVIEW_DATABASE_URL: ${{ secrets.PAYCORE_PREVIEW_DATABASE_URL }}
+          PAYCORE_PREVIEW_WEBHOOK_SECRET: ${{ secrets.PAYCORE_PREVIEW_WEBHOOK_SECRET }}
+        run: |
+          test -n "$VERCEL_TOKEN" || { echo "Missing VERCEL_TOKEN"; exit 1; }
+          test -n "$PAYCORE_PREVIEW_DATABASE_URL" || { echo "Missing PAYCORE_PREVIEW_DATABASE_URL"; exit 1; }
+          test -n "$PAYCORE_PREVIEW_WEBHOOK_SECRET" || { echo "Missing PAYCORE_PREVIEW_WEBHOOK_SECRET"; exit 1; }
+
+      - name: Install reconstruction dependencies
+        run: npm install
+
+      - name: Run local reconstruction contract
+        run: npm test
+
+      - name: Build reconstruction locally
+        run: npm run build
+
+      - name: Deploy to isolated Vercel preview target
+        id: deploy
+        shell: bash
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          PAYCORE_PREVIEW_DATABASE_URL: ${{ secrets.PAYCORE_PREVIEW_DATABASE_URL }}
+          PAYCORE_PREVIEW_WEBHOOK_SECRET: ${{ secrets.PAYCORE_PREVIEW_WEBHOOK_SECRET }}
+        run: |
+          DEPLOYMENT_URL=$(npx vercel@58.1.0 deploy --yes --token "$VERCEL_TOKEN" \
+            --env PAYMENT_MODE=sandbox \
+            --env LIVE_MONEY=false \
+            --env CHECKOUT_ENABLED=false \
+            --env PAYMENT_LINKS_CONFIGURED=false \
+            --env DATABASE_URL="$PAYCORE_PREVIEW_DATABASE_URL" \
+            --env STRIPE_WEBHOOK_SECRET="$PAYCORE_PREVIEW_WEBHOOK_SECRET")
+          echo "deployment_url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+          echo "Preview deployment: $DEPLOYMENT_URL"
+
+      - name: Verify preview health and readiness
+        shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          npx vercel@58.1.0 curl /api/health --deployment "$DEPLOYMENT_URL" --token "$VERCEL_TOKEN"
+          npx vercel@58.1.0 curl /api/ready --deployment "$DEPLOYMENT_URL" --token "$VERCEL_TOKEN"
+          npx vercel@58.1.0 curl /api/offers --deployment "$DEPLOYMENT_URL" --token "$VERCEL_TOKEN"
+
+      - name: Confirm checkout remains blocked
+        shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          set +e
+          OUTPUT=$(npx vercel@58.1.0 curl /api/checkout/quick-wins-kit --deployment "$DEPLOYMENT_URL" --token "$VERCEL_TOKEN" -- --request POST 2>&1)
+          set -e
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "preview_sandbox_only" || { echo "Checkout safety marker missing"; exit 1; }
+
+      - name: Inspect preview runtime errors
+        shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx vercel@58.1.0 logs --deployment "$DEPLOYMENT_URL" --level error --limit 50 --token "$VERCEL_TOKEN"
+
+      - name: Record machine-readable deployment evidence
+        shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
+        run: |
+          cat > ../paycore-preview-evidence.json <<EOF
+          {
+            "gitSha": "$GITHUB_SHA",
+            "gitRef": "$GITHUB_REF_NAME",
+            "vercelOrgId": "$VERCEL_ORG_ID",
+            "vercelProjectId": "$VERCEL_PROJECT_ID",
+            "deploymentUrl": "$DEPLOYMENT_URL",
+            "paymentMode": "sandbox",
+            "liveMoney": false,
+            "checkoutEnabled": false,
+            "paymentLinksConfigured": false,
+            "productionPromotionRequested": false
+          }
+          EOF
+          cat ../paycore-preview-evidence.json
+
+      - name: Upload deployment evidence artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: paycore-preview-evidence
+          path: paycore-preview-evidence.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Record deployment summary
+        shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.deployment_url }}
+        run: |
+          echo "PAYCORE_PREVIEW_URL=$DEPLOYMENT_URL" >> "$GITHUB_STEP_SUMMARY"
+          echo "GIT_SHA=$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "VERCEL_PROJECT_ID=$VERCEL_PROJECT_ID" >> "$GITHUB_STEP_SUMMARY"
+          echo "Evidence artifact: paycore-preview-evidence" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production promotion was not requested or performed." >> "$GITHUB_STEP_SUMMARY"

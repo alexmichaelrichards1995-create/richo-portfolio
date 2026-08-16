@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "scripts": {
     "migrate": "bash scripts/run_migrations.sh",
-    "test": "node tests/db_migrations.test.js && node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js && node tests/stripe_integration.test.js && node tests/stripe_connect.integration.test.js"
+    "test:runtime": "node tests/smoke.mjs",
+    "test:paycore-contract": "node tests/paycore_live_contract.test.mjs",
+    "test:paycore-reconstruction": "node paycore-reconstruction/test/contract-local.mjs",
+    "test": "node tests/smoke.mjs && node tests/db_ssl_mode.test.js && node paycore-reconstruction/test/contract-local.mjs && node tests/db_migrations.test.js && node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js && node tests/stripe_integration.test.js && node tests/stripe_connect.integration.test.js"
   },
   "dependencies": {
     "express": "^4.18.2",
