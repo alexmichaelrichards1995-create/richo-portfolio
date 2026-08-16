@@ -20,7 +20,7 @@ for (const required of [
   'https://richosystems.technology/pilot?offer=ai-quick-fix',
   'https://richosystems.technology/pilot?offer=ai-quick-fix-session',
   'Secure checkout activating',
-  'no card details',
+  'does not collect card details',
   'Machine final approvals: zero',
 ]) {
   assert.ok(html.includes(required), `entry-offers storefront missing required contract text: ${required}`);
