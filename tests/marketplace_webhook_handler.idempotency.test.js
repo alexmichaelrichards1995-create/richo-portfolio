@@ -1,4 +1,4 @@
-// Test processMarketplaceEvent idempotency
+// Test processMarketplaceEvent idempotency, including concurrent duplicate delivery claims.
 // Run with: node tests/marketplace_webhook_handler.idempotency.test.js
 
 (async () => {
@@ -28,7 +28,21 @@
       process.exit(1);
     }
 
-    console.log('OK: idempotency behavior verified');
+    await clearHandledForTests();
+    const concurrentDeliveryId = 'test-delivery-concurrent-456';
+    const results = await Promise.all([
+      processMarketplaceEvent(sampleEvent, concurrentDeliveryId),
+      processMarketplaceEvent(sampleEvent, concurrentDeliveryId)
+    ]);
+
+    const processed = results.filter((result) => result && result.processed).length;
+    const skipped = results.filter((result) => result && result.skipped).length;
+    if (processed !== 1 || skipped !== 1) {
+      console.error('FAILED: concurrent duplicate delivery was not processed exactly once', results);
+      process.exit(1);
+    }
+
+    console.log('OK: sequential and concurrent idempotency behavior verified');
     process.exit(0);
   } catch (err) {
     console.error('FAILED', err && err.message);

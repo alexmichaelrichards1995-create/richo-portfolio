@@ -48,16 +48,9 @@ jobs:
         run: |
           psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
 
-      - name: Set secrets for tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-        run: echo "secrets set"
-
       - name: Run tests
         env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          GITHUB_WEBHOOK_SECRET: richo-ci-webhook-secret-not-production
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
         run: |
           node tests/marketplace_webhook_handler.test.js

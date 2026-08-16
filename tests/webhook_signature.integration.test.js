@@ -13,7 +13,13 @@ const { router } = require('../marketplace_webhook_handler');
   const server = app.listen(0, async () => {
     const port = server.address().port;
     const payload = JSON.stringify({ action: 'purchased', marketplace_purchase: { account: { login: 'acme', id: 111 }, plan: { id: 1, name: 'Pro', monthly_price_in_cents: 2900 } } });
-    const secret = process.env.GITHUB_WEBHOOK_SECRET || 'replace-me';
+    const secret = process.env.GITHUB_WEBHOOK_SECRET;
+    if (!secret) {
+      console.error('FAILED: GITHUB_WEBHOOK_SECRET must be set for integration tests');
+      server.close();
+      process.exit(1);
+      return;
+    }
     const hmac = crypto.createHmac('sha256', secret);
     hmac.update(Buffer.from(payload));
     const sig = `sha256=${hmac.digest('hex')}`;
@@ -35,12 +41,13 @@ const { router } = require('../marketplace_webhook_handler');
       let b = '';
       res.on('data', c => b += c.toString());
       res.on('end', () => {
-        if (res.statusCode === 200 && b === 'ok') {
+        const responseBody = b.trim();
+        if (res.statusCode === 202 && responseBody === 'accepted') {
           console.log('OK: webhook accepted with valid signature');
           server.close();
           process.exit(0);
         } else {
-          console.error('FAILED: webhook response', res.statusCode, b);
+          console.error('FAILED: webhook response', res.statusCode, JSON.stringify(b));
           server.close();
           process.exit(1);
         }

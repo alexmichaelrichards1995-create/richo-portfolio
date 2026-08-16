@@ -8,10 +8,16 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const BASE_URL = process.env.PUBLIC_BASE_URL || `http://localhost:${PORT}`;
 const GITHUB_API = 'https://api.github.com';
 
+function databaseSslOptions() {
+  if (process.env.DATABASE_SSL !== 'true') return undefined;
+  const ca = process.env.DATABASE_CA_CERT || '';
+  return ca ? { rejectUnauthorized: true, ca } : { rejectUnauthorized: true };
+}
+
 const pool = DATABASE_URL
   ? new Pool({
       connectionString: DATABASE_URL,
-      ssl: process.env.DATABASE_SSL === 'true' ? { rejectUnauthorized: false } : undefined,
+      ssl: databaseSslOptions(),
       max: Number(process.env.DATABASE_POOL_MAX || 10),
     })
   : null;
@@ -371,19 +377,20 @@ async function route(req, res) {
   if (req.method === 'GET' && url.pathname === '/health/live') return json(res, 200, { ok: true, service: 'richo-github-app' });
 
   if (req.method === 'GET' && url.pathname === '/health/ready') {
-    const checks = {
-      database: false,
-      webhook_secret: Boolean(process.env.GITHUB_WEBHOOK_SECRET),
-      app_id: Boolean(process.env.GITHUB_APP_ID),
-      private_key: Boolean(process.env.GITHUB_PRIVATE_KEY || process.env.GITHUB_PRIVATE_KEY_B64),
-      oauth_client: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
-      session_secret: Boolean(process.env.SESSION_SECRET),
-    };
+    let databaseReady = false;
     if (pool) {
-      try { await pool.query('SELECT 1'); checks.database = true; } catch {}
+      try { await pool.query('SELECT 1'); databaseReady = true; } catch {}
     }
-    const ok = Object.values(checks).every(Boolean);
-    return json(res, ok ? 200 : 503, { ok, checks });
+    const ok = Boolean(
+      databaseReady &&
+      process.env.GITHUB_WEBHOOK_SECRET &&
+      process.env.GITHUB_APP_ID &&
+      (process.env.GITHUB_PRIVATE_KEY || process.env.GITHUB_PRIVATE_KEY_B64) &&
+      process.env.GITHUB_CLIENT_ID &&
+      process.env.GITHUB_CLIENT_SECRET &&
+      process.env.SESSION_SECRET
+    );
+    return json(res, ok ? 200 : 503, { ok });
   }
 
   if (req.method === 'GET' && url.pathname === '/auth/github') {
