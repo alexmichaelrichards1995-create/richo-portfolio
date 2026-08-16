@@ -27,14 +27,29 @@ Turn the current Richo Systems portfolio into a coherent, measurable production 
 | Knowledge | Notion | Single operating hub and evidence register |
 | Team operations | Slack | Launch/incident/revenue communication lanes |
 
+## Verified findings — 2026-08-17
+
+- Upgrade work is isolated on `richo-systems-upgrade-2026-08-17` with draft PR #24 targeting `main`.
+- Vercel resolves authenticated targets for PayCore green, intake, intake API, recovery, deploy-probe, and the Richo GitHub App. Project existence is not considered proof of runtime health.
+- The connected PostHog project reported zero `$pageview` events for the preceding 30 days. Treat analytics as unverified until a controlled live event is captured end-to-end.
+- The connected PostHog project also reported zero `$exception` events for the same period; this does not prove absence of runtime errors while instrumentation is unverified.
+- HubSpot access supports the commercial object model required for Richo: contacts, companies, deals, products, line items, tasks, tickets, landing pages, and marketing email.
+- Existing Notion operating records already contain PayCore production/recovery work, sales playbooks, provider evidence, and an upgrade register. Reuse these instead of creating a competing control plane.
+- Slack target discovery was not verified. No messages should be sent using guessed workspace/channel identifiers.
+
 ## Priority P0
 
-- Verify current Vercel deployment status for every Richo production/recovery project.
-- Confirm the active application repository and deployment mapping.
-- Review CI failures and remove release blockers.
-- Establish a canonical health endpoint and deployment smoke test.
-- Verify analytics capture on the live customer journey.
-- Verify that the sales catalogue, checkout path, and CRM offer names/prices agree.
+- [ ] Prove the canonical production deployment is READY and map it to its exact GitHub revision.
+- [ ] Prove the recovery deployment is READY and document rollback/traffic-switch procedure.
+- [ ] Reconcile historical PayCore build-failure evidence with the current Vercel state.
+- [ ] Establish a canonical `/health` or equivalent endpoint with dependency-safe status reporting.
+- [ ] Add a deployment smoke test covering homepage/API health and a non-destructive critical-path request.
+- [ ] Restore/verify PostHog initialization on the actual production customer surface.
+- [ ] Capture a controlled `richo_smoke_test` event and confirm it appears in PostHog before trusting traffic metrics.
+- [ ] Define conversion events: `offer_viewed`, `lead_submitted`, `checkout_started`, `purchase_completed`, `delivery_accessed`.
+- [ ] Map each sellable digital offer to one canonical name, SKU, price/currency, checkout destination, HubSpot product, and fulfilment path.
+- [ ] Verify payment checkout in test/safe mode before any production configuration change.
+- [ ] Resolve a real Slack workspace/channel ID before enabling operational notifications.
 
 ## Priority P1
 
@@ -44,6 +59,12 @@ Turn the current Richo Systems portfolio into a coherent, measurable production 
 - Create a single Richo Systems operating dashboard/document linking source, deployments, analytics, sales, and evidence.
 - Document owner-only operations that require approval and credentials.
 
+## Canonical customer/revenue journey
+
+`Visitor -> Offer Viewed -> Lead/Checkout -> Payment -> CRM Customer/Deal -> Digital Fulfilment -> Support -> Retention/Upsell`
+
+Every transition must produce evidence. A system is not considered integrated merely because accounts or projects exist.
+
 ## Definition of done
 
-A release is sale-ready only when the production URL is reachable, core journey smoke tests pass, errors are monitored, conversion events are captured, checkout is verified, offer/pricing is consistent, and rollback instructions are recorded.
+A release is sale-ready only when the production URL is reachable, core journey smoke tests pass, errors are monitored, conversion events are captured, checkout is verified, offer/pricing is consistent, digital fulfilment works, CRM state is correct, and rollback instructions are recorded.
