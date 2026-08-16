@@ -4,6 +4,7 @@ const assert = require('assert');
 const { nextDue } = require('../taskgrid/cadence');
 const { TaskEngine, sortDue, requiresApproval, isDue } = require('../taskgrid/engine');
 const { MemoryStore } = require('../taskgrid/memory_store');
+const { ControlPlaneStore } = require('../taskgrid/control_plane_store');
 
 function task(id, priority = 'P2', extra = {}) {
   return {
@@ -92,6 +93,23 @@ function task(id, priority = 'P2', extra = {}) {
   const failure = await failureEngine.runTask(failureTask, base);
   assert.strictEqual(failure.status, 'Failed');
   assert.strictEqual(failureStore.leases.size, 0);
+
+  class EnabledOnlyStore extends MemoryStore {
+    async listTasks() {
+      return (await super.listTasks()).filter(t => t.Enabled);
+    }
+  }
+  const mirrorStore = new EnabledOnlyStore([task('mirror', 'P1', { NotionPageID: 'notion-page-1' })]);
+  const notionWrites = [];
+  const controlStore = new ControlPlaneStore({
+    durableStore: mirrorStore,
+    notion: { updateTaskPage: async (pageId, patch) => notionWrites.push({ pageId, patch }) }
+  });
+  await controlStore.updateTask('mirror', { Enabled: false, LastResult: 'condition satisfied' });
+  assert.strictEqual((await mirrorStore.listTasks()).length, 0);
+  assert.strictEqual(notionWrites.length, 1);
+  assert.strictEqual(notionWrites[0].pageId, 'notion-page-1');
+  assert.strictEqual(notionWrites[0].patch.Enabled, false);
 
   console.log('taskgrid_store_room.test.js: PASS');
 })().catch(err => {
