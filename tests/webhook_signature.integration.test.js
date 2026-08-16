@@ -41,12 +41,13 @@ const { router } = require('../marketplace_webhook_handler');
       let b = '';
       res.on('data', c => b += c.toString());
       res.on('end', () => {
-        if (res.statusCode === 202 && b === 'accepted') {
+        const responseBody = b.trim();
+        if (res.statusCode === 202 && responseBody === 'accepted') {
           console.log('OK: webhook accepted with valid signature');
           server.close();
           process.exit(0);
         } else {
-          console.error('FAILED: webhook response', res.statusCode, b);
+          console.error('FAILED: webhook response', res.statusCode, JSON.stringify(b));
           server.close();
           process.exit(1);
         }
