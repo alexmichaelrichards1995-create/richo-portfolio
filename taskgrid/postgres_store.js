@@ -72,8 +72,8 @@ class PostgresStore {
     await this.pool.query(`
       INSERT INTO taskgrid_tasks(
         task_id, notion_page_id, task_name, priority, enabled, status, task_type, cadence,
-        source, approval_required, instruction, next_due, last_run, last_result, updated_at
-      ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
+        source, approval_required, owner_approved, instruction, next_due, last_run, last_result, updated_at
+      ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
       ON CONFLICT (task_id) DO UPDATE SET
         notion_page_id=EXCLUDED.notion_page_id,
         task_name=EXCLUDED.task_name,
@@ -84,12 +84,13 @@ class PostgresStore {
         cadence=EXCLUDED.cadence,
         source=EXCLUDED.source,
         approval_required=EXCLUDED.approval_required,
+        owner_approved=EXCLUDED.owner_approved,
         instruction=EXCLUDED.instruction,
         next_due=COALESCE(taskgrid_tasks.next_due, EXCLUDED.next_due),
         updated_at=NOW()
     `, [
       task.TaskID, task.NotionPageID || null, task.Task, task.Priority, task.Enabled, task.Status,
-      task.TaskType, task.Cadence, task.Source, task.ApprovalRequired, task.Instruction || null,
+      task.TaskType, task.Cadence, task.Source, task.ApprovalRequired, Boolean(task.OwnerApproved), task.Instruction || null,
       task.NextDue || null, task.LastRun || null, task.LastResult || null
     ]);
   }
@@ -107,9 +108,7 @@ class PostgresStore {
              COUNT(*) FILTER (WHERE enabled AND status='Ready' AND (next_due IS NULL OR next_due<=NOW())) AS due,
              COUNT(*) FILTER (WHERE status='Waiting Approval') AS waiting_approval,
              COUNT(*) FILTER (WHERE status='Failed') AS failed,
-             EXTRACT(EPOCH FROM (
-               NOW() - (MIN(next_due) FILTER (WHERE enabled AND status='Ready' AND next_due<=NOW()))
-             )) AS oldest_due_seconds
+             EXTRACT(EPOCH FROM (NOW() - MIN(next_due) FILTER (WHERE enabled AND status='Ready' AND next_due<=NOW()))) AS oldest_due_seconds
       FROM taskgrid_tasks
     `);
     return r;
