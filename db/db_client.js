@@ -6,11 +6,33 @@
 const fs = require('fs');
 const path = require('path');
 
+function normalizeDatabaseUrl(value) {
+  if (!value) return value;
+
+  try {
+    const url = new URL(value);
+    const hostname = (url.hostname || '').toLowerCase();
+    const localHosts = new Set(['localhost', '127.0.0.1', '::1']);
+
+    // pg-connection-string currently treats these aliases as verify-full but has
+    // announced weaker libpq-compatible semantics in a future major release.
+    // Make the intended strict TLS verification explicit for non-local DB URLs.
+    const sslMode = (url.searchParams.get('sslmode') || '').toLowerCase();
+    if (!localHosts.has(hostname) && ['prefer', 'require', 'verify-ca'].includes(sslMode)) {
+      url.searchParams.set('sslmode', 'verify-full');
+    }
+
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
 let pgPool = null;
 try {
   const { Pool } = require('pg');
   if (process.env.PGHOST || process.env.DATABASE_URL) {
-    pgPool = new Pool({ connectionString: process.env.DATABASE_URL || undefined });
+    pgPool = new Pool({ connectionString: normalizeDatabaseUrl(process.env.DATABASE_URL) || undefined });
   }
 } catch (e) {
   // pg not installed — fallback to file store
@@ -77,4 +99,4 @@ async function getSubscription(accountId) {
   return getSubscriptionFile(accountId);
 }
 
-module.exports = { upsertSubscription, getSubscription };
+module.exports = { upsertSubscription, getSubscription, normalizeDatabaseUrl };
