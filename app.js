@@ -88,6 +88,10 @@ function readinessState(score) {
   return ['BLOCKED','Critical readiness gaps remain. Do not treat this workflow as approved for consequential use.'];
 }
 
+function trackUsage(event, properties = {}) {
+  window.RICHOAnalytics?.track(event, properties);
+}
+
 function scoreProduct(key) {
   const config = products[key];
   const checked = config.fields.filter(([id]) => document.getElementById(`${key}-${id}`)?.checked).length;
@@ -95,6 +99,7 @@ function scoreProduct(key) {
   const [state,message] = readinessState(score);
   const missing = config.fields.filter(([id]) => !document.getElementById(`${key}-${id}`)?.checked).map(([,label]) => label);
   renderOutput(`${key}-output`, score, state, message, missing);
+  trackUsage('richo_readiness_completed', { assessment: key });
 }
 
 function renderOutput(outputId, score, state, message, missing) {
@@ -151,6 +156,10 @@ function selectCatalogProduct(id) {
   const select = document.getElementById('catalog-product');
   if (select) select.value = id;
   renderFamilyAssessment(product);
+  trackUsage('richo_catalog_product_selected', {
+    product_id: product.id,
+    product_family: product.family
+  });
   document.getElementById('catalog-assessment')?.scrollIntoView({behavior:'smooth',block:'center'});
 }
 
@@ -177,6 +186,10 @@ function scoreCatalogProduct() {
   const [state,message] = readinessState(score);
   const missing = checks.filter((_,index) => !inputs[index]?.checked);
   renderOutput('catalog-output', score, state, message, missing);
+  trackUsage('richo_catalog_readiness_completed', {
+    product_id: product.id,
+    product_family: product.family
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {

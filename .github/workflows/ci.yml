@@ -25,6 +25,9 @@ jobs:
         with:
           node-version: ${{ matrix.node-version }}
 
+      - name: Run product and analytics smoke gate
+        run: node tests/smoke.mjs
+
       - name: Install system deps (psql)
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
@@ -46,20 +49,15 @@ jobs:
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
         run: |
-          psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
+          set -euo pipefail
+          for migration in migrations/*.sql; do
+            echo "Applying $migration"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$migration"
+          done
 
-      - name: Set secrets for tests
+      - name: Run complete hermetic test suite
         env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-        run: echo "secrets set"
-
-      - name: Run tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
+          GITHUB_WEBHOOK_SECRET: richo-ci-webhook-test-secret
+          STRIPE_API_KEY: ""
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          node tests/marketplace_webhook_handler.test.js
-          node tests/marketplace_webhook_handler.idempotency.test.js
-          node tests/webhook_signature.integration.test.js
+        run: npm test

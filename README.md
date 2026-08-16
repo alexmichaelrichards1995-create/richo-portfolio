@@ -1,79 +1,55 @@
-# R.I.C.H.O. Product Runtime Hub
+# R.I.C.H.O. Product Runtime
 
-![CI](https://github.com/alexmichaelrichards1995-create/richo-portfolio/actions/workflows/ci.yml/badge.svg)
+R.I.C.H.O. (Research Intelligence & Continuous Heuristic Optimisation) product runtime and governed commercial instrumentation.
 
-A controlled browser-based runtime layer for the R.I.C.H.O. (Research Intelligence & Continuous Heuristic Optimisation) digital product catalogue.
+## Commercial analytics boundary
 
-## Current runtime
+Browser analytics records page views, engagement and checkout-start intent. A checkout-start event is **not** treated as a sale.
 
-- 53 addressable products: `RSP-001` through `RSP-053`
-- 6 product-family readiness engines
-- 3 specialised interactive engines for:
-  - RSP-001 — AI Governance Starter Kit
-  - RSP-002 — Paid Pilot Readiness Kit
-  - RSP-003 — Buyer-Ready IP and Due-Diligence Kit
-- deterministic client-side scoring
-- evidence-gap reporting
-- explicit human approval gates
-- no secrets or backend dependency for readiness assessments
-- automated smoke tests before deployment packaging
+Verified revenue is emitted only from a Stripe-signed Checkout success event after the session is confirmed paid with a positive amount and valid currency. The verified purchase is persisted in PostgreSQL before the server-side `richo_purchase_completed` event is sent to PostHog.
 
-## Product families
+### Revenue API
 
-1. Foundation
-2. Governance, Risk & Assurance
-3. Commercial & Revenue
-4. Product & Delivery
-5. Procurement, Market Access & Transactions
-6. Leadership, Workforce & Operating System
+The repository's Vercel serverless entrypoint is `api/index.js`.
 
-## Safety and authority boundary
+- `GET /api/health` — liveness plus non-secret configuration flags.
+- `GET /api/ready` — readiness gate; requires database, Stripe webhook secret and PostHog project token, and verifies the database is reachable.
+- `POST /api/stripe` — signed Stripe Checkout webhook. The Stripe router is mounted before any JSON/body parser so `express.raw()` receives the exact request bytes required for signature verification.
 
-The runtime is an implementation/readiness aid. A readiness score does not provide professional advice, certification, legal compliance, financial approval, security assurance, contractual acceptance or authority to perform consequential external actions. Human approval remains required where applicable.
+A separate existing Vercel payment-intake deployment may expose its Stripe callback as `/api/stripe/webhook`; do not register Stripe against either route until the chosen production deployment is public, its readiness gate passes, and the matching webhook signing secret is installed in that deployment. Run only one authoritative production purchase receiver to avoid split receipts.
 
-## Local verification
+Production activation requires Vercel environment variables:
 
-```bash
-node tests/smoke.mjs
-```
+- `DATABASE_URL`
+- `STRIPE_WEBHOOK_SECRET`
+- `POSTHOG_PROJECT_TOKEN`
+- optional `POSTHOG_HOST` (defaults to the US PostHog ingestion host)
+- `STRIPE_API_KEY` only for code paths that call Stripe APIs; webhook signature verification itself uses the webhook signing secret.
 
-The smoke gate checks required runtime files, removes known scaffold placeholders, verifies the complete unique RSP-001–RSP-053 catalogue and confirms the core runtime functions are present.
+Never commit these values to the repository.
 
-## Local preview
+### Stripe events accepted as verified revenue
 
-### Docker
+- `checkout.session.completed`
+- `checkout.session.async_payment_succeeded`
 
-```bash
-docker build -t richo-runtime .
-docker run --rm -p 8080:80 richo-runtime
-```
+An event is ignored unless `payment_status=paid`, `amount_total` is a positive safe integer, and `currency` is a valid three-letter code.
 
-Open `http://localhost:8080`.
+### Idempotency and recovery
 
-You can also serve the repository root with any static HTTP server.
+The `verified_purchases` ledger is keyed by Checkout Session ID. Duplicate webhook deliveries do not create duplicate sales. PostHog delivery status is persisted separately so temporary analytics failures can be retried without losing or double-counting the verified purchase.
 
-## Deployment targets
+## Validation
 
-Configuration is retained for GitHub Pages, Vercel, Netlify and Docker/Nginx.
+CI applies all SQL migrations and tests:
 
-The GitHub Actions workflow runs the smoke gate, packages the static site and attempts a Pages deployment from `main`. GitHub Pages must be enabled in repository settings before the final Pages deployment step can succeed.
+- migration schema expectations
+- marketplace webhook behavior and idempotency
+- webhook signature verification
+- paid/unpaid/zero-value Stripe revenue qualification
+- duplicate webhook suppression
+- analytics retry recovery
+- delayed-payment success handling
+- Vercel revenue API health/routing contract
 
-## Production domain
-
-Primary Richo Systems domain: `https://richosystems.technology/`
-
-The runtime also links to the Richo Systems tools surface at `/tools`.
-
-## Repository structure
-
-- `index.html` — runtime UI and product surfaces
-- `catalog.js` — canonical RSP-001–RSP-053 runtime catalogue
-- `app.js` — scoring, search, selection and readiness engines
-- `styles.css` — responsive runtime interface
-- `tests/smoke.mjs` — pre-deployment verification
-- `.github/workflows/deploy-pages.yml` — CI/deployment workflow
-- `Dockerfile`, `vercel.json`, `netlify.toml` — alternate deployment targets
-
-## Completion standard
-
-A product should not be described as fully production-ready merely because it appears in the catalogue. The shared runtime currently gives all 53 products an executable readiness/control layer. Full product-specific software conversion requires each product to receive its own workflow logic, input/output model, persistence/export requirements where appropriate, acceptance tests, documentation and deployment verification.
+Production is not considered activated until a single deployed readiness endpoint passes, Stripe has one authoritative webhook endpoint registered to the corresponding public callback route, and a signed paid test event is accepted and persisted.

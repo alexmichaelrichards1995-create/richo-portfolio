@@ -1,0 +1,18 @@
+{
+  "name": "richo-paycore-next",
+  "version": "3.0.0",
+  "private": true,
+  "scripts": {
+    "build": "next build"
+  },
+  "engines": {
+    "node": "24.x"
+  },
+  "dependencies": {
+    "next": "16.3.0",
+    "pg": "^8.11.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "stripe": "^11.0.0"
+  }
+}
