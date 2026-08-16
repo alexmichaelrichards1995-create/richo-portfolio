@@ -1,0 +1,106 @@
+name: TaskGrid CI
+
+on:
+  push:
+    branches:
+      - feat/passive-task-store-room
+    paths:
+      - 'taskgrid/**'
+      - 'tests/taskgrid_*.js'
+      - 'migrations/003_taskgrid_store_room.sql'
+      - '.github/workflows/taskgrid-ci.yml'
+  pull_request:
+    paths:
+      - 'taskgrid/**'
+      - 'tests/taskgrid_*.js'
+      - 'migrations/003_taskgrid_store_room.sql'
+      - '.github/workflows/taskgrid-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  taskgrid:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: taskgrid_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U postgres -d taskgrid_test"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=12
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/taskgrid_test
+      TASKGRID_INTERNAL_TOKEN: ci-only-nonsecret-token
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      - name: Apply TaskGrid schema twice for idempotency
+        run: |
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/003_taskgrid_store_room.sql
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/003_taskgrid_store_room.sql
+
+      - name: TaskGrid deterministic engine tests
+        run: node tests/taskgrid_store_room.test.js
+
+      - name: Notion adapter contract tests
+        run: node tests/taskgrid_notion_adapter.test.js
+
+      - name: PostgreSQL durability and lease integration tests
+        run: node tests/taskgrid_postgres.integration.test.js
+
+      - name: Security regression - internal token fails closed
+        run: |
+          node - <<'NODE'
+          const assert = require('assert');
+          const { internalAuthorized } = require('./taskgrid/http');
+          const req = { get: () => undefined };
+          const old = process.env.TASKGRID_INTERNAL_TOKEN;
+          delete process.env.TASKGRID_INTERNAL_TOKEN;
+          assert.strictEqual(internalAuthorized(req), false);
+          process.env.TASKGRID_INTERNAL_TOKEN = 'expected';
+          assert.strictEqual(internalAuthorized({ get: () => 'wrong' }), false);
+          assert.strictEqual(internalAuthorized({ get: () => 'expected' }), true);
+          if (old === undefined) delete process.env.TASKGRID_INTERNAL_TOKEN; else process.env.TASKGRID_INTERNAL_TOKEN = old;
+          console.log('taskgrid internal auth: PASS');
+          NODE
+
+      - name: Verify no committed TaskGrid secrets
+        run: |
+          if grep -RInE '(secret|token|api[_-]?key)\s*[:=]\s*["'"'][A-Za-z0-9_-]{20,}' taskgrid migrations/003_taskgrid_store_room.sql; then
+            echo 'Potential committed secret detected.' >&2
+            exit 1
+          fi
+
+      - name: TaskGrid CI receipt
+        run: |
+          printf '%s\n' \
+            'TASKGRID_ENGINE=PASS' \
+            'NOTION_ADAPTER_CONTRACT=PASS' \
+            'POSTGRES_STORE=PASS' \
+            'LEASE_DUPLICATE_SUPPRESSION=PASS' \
+            'MIGRATION_IDEMPOTENCY=PASS' \
+            'INTERNAL_AUTH_FAIL_CLOSED=PASS' \
+            'BATCH_CEILING=20' \
+            'LIVE_PROVIDER_ACTIONS=NOT_EXERCISED'
