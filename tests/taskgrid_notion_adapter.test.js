@@ -3,7 +3,7 @@
 const assert = require('assert');
 const { NotionAdapter } = require('../taskgrid/notion_adapter');
 
-function page(id, number, priority) {
+function page(id, number, priority, ownerApproved = false) {
   return {
     id,
     properties: {
@@ -16,6 +16,7 @@ function page(id, number, priority) {
       Cadence: { rich_text: [{ plain_text: 'HOURLY' }] },
       Source: { select: { name: 'ChatGPT Dispatcher' } },
       'Approval Required': { checkbox: false },
+      'Owner Approved': { checkbox: ownerApproved },
       Instruction: { rich_text: [{ plain_text: 'check status' }] },
       'Next Due': { date: null },
       'Last Run': { date: null },
@@ -28,7 +29,7 @@ function page(id, number, priority) {
 (async () => {
   const calls = [];
   const responses = [
-    { ok: true, json: async () => ({ results: [page('p1', 1, 'P0')], has_more: true, next_cursor: 'cursor-2' }) },
+    { ok: true, json: async () => ({ results: [page('p1', 1, 'P0', true)], has_more: true, next_cursor: 'cursor-2' }) },
     { ok: true, json: async () => ({ results: [page('p2', 2, 'P2')], has_more: false, next_cursor: null }) }
   ];
   const fetchImpl = async (url, init) => {
@@ -41,7 +42,9 @@ function page(id, number, priority) {
   assert.strictEqual(tasks.length, 2);
   assert.strictEqual(tasks[0].TaskID, 'TG-1');
   assert.strictEqual(tasks[0].Priority, 'P0');
+  assert.strictEqual(tasks[0].OwnerApproved, true);
   assert.strictEqual(tasks[1].TaskID, 'TG-2');
+  assert.strictEqual(tasks[1].OwnerApproved, false);
   assert.strictEqual(calls.length, 2);
   assert.strictEqual(calls[0].body.page_size, 1);
   assert.strictEqual(calls[1].body.start_cursor, 'cursor-2');
@@ -57,11 +60,21 @@ function page(id, number, priority) {
     }
   });
   await patchAdapter.updateTaskPage('p1', {
-    Status: 'No Change', Enabled: true, LastResult: 'no change',
+    Status: 'No Change', Enabled: true, OwnerApproved: false, LastResult: 'no change',
     LastRun: '2026-08-16T11:00:00.000Z', NextDue: '2026-08-16T12:00:00.000Z'
   });
   assert.strictEqual(patchBody.properties.Status.select.name, 'No Change');
   assert.strictEqual(patchBody.properties.Enabled.checkbox, true);
+  assert.strictEqual(patchBody.properties['Owner Approved'].checkbox, false);
+
+  const oldPrimary = process.env.TASKGRID_NOTION_DATA_SOURCE_ID;
+  const oldLegacy = process.env.NOTION_TASKGRID_DATA_SOURCE_ID;
+  process.env.TASKGRID_NOTION_DATA_SOURCE_ID = 'primary-ds';
+  process.env.NOTION_TASKGRID_DATA_SOURCE_ID = 'legacy-ds';
+  const envAdapter = new NotionAdapter({ token: 'test-token', fetchImpl: async () => ({ ok: true, json: async () => ({}) }) });
+  assert.strictEqual(envAdapter.dataSourceId, 'primary-ds');
+  if (oldPrimary === undefined) delete process.env.TASKGRID_NOTION_DATA_SOURCE_ID; else process.env.TASKGRID_NOTION_DATA_SOURCE_ID = oldPrimary;
+  if (oldLegacy === undefined) delete process.env.NOTION_TASKGRID_DATA_SOURCE_ID; else process.env.NOTION_TASKGRID_DATA_SOURCE_ID = oldLegacy;
 
   console.log('taskgrid_notion_adapter.test.js: PASS');
 })().catch(err => {
