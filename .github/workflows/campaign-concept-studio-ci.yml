@@ -31,7 +31,9 @@ jobs:
           mkdir -p .ci/campaign-concept-studio
           cat apps/campaign-concept-studio-ci/source.b64.part00 \
               apps/campaign-concept-studio-ci/source.b64.part01 \
-            | base64 --decode > .ci/campaign-concept-studio/source.zip
+            | base64 --ignore-garbage --decode > .ci/campaign-concept-studio/source.zip
+          test "$(wc -c < .ci/campaign-concept-studio/source.zip)" -gt 30000
+          unzip -tq .ci/campaign-concept-studio/source.zip
           unzip -q .ci/campaign-concept-studio/source.zip -d .ci/campaign-concept-studio/app
           test ! -f .ci/campaign-concept-studio/app/.env.local
           test ! -f .ci/campaign-concept-studio/app/tsconfig.tsbuildinfo
