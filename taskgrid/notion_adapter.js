@@ -23,6 +23,7 @@ function normalizeNotionTask(page) {
     Cadence: richText(p.Cadence),
     Source: selectName(p.Source) || 'ChatGPT Dispatcher',
     ApprovalRequired: checkbox(p['Approval Required']),
+    OwnerApproved: checkbox(p['Owner Approved']),
     Instruction: richText(p.Instruction),
     NextDue: dateStart(p['Next Due']),
     LastRun: dateStart(p['Last Run']),
@@ -34,7 +35,7 @@ function normalizeNotionTask(page) {
 class NotionAdapter {
   constructor({ token, dataSourceId, apiVersion = '2025-09-03', fetchImpl = global.fetch } = {}) {
     this.token = token || process.env.NOTION_TOKEN;
-    this.dataSourceId = dataSourceId || process.env.NOTION_TASKGRID_DATA_SOURCE_ID;
+    this.dataSourceId = dataSourceId || process.env.TASKGRID_NOTION_DATA_SOURCE_ID || process.env.NOTION_TASKGRID_DATA_SOURCE_ID;
     this.apiVersion = apiVersion;
     this.fetch = fetchImpl;
     if (!this.fetch) throw new Error('fetch_unavailable');
@@ -96,6 +97,7 @@ class NotionAdapter {
     const properties = {};
     if ('Status' in patch) properties.Status = { select: { name: patch.Status } };
     if ('Enabled' in patch) properties.Enabled = { checkbox: Boolean(patch.Enabled) };
+    if ('OwnerApproved' in patch) properties['Owner Approved'] = { checkbox: Boolean(patch.OwnerApproved) };
     if ('LastResult' in patch) properties['Last Result'] = { rich_text: [{ type: 'text', text: { content: String(patch.LastResult || '').slice(0, 1900) } }] };
     if ('LastRun' in patch) properties['Last Run'] = { date: patch.LastRun ? { start: patch.LastRun } : null };
     if ('NextDue' in patch) properties['Next Due'] = { date: patch.NextDue ? { start: patch.NextDue } : null };
