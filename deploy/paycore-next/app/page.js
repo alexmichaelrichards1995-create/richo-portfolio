@@ -1,3 +1,4 @@
+import AnalyticsClient from './AnalyticsClient';
 import CheckoutClient from './CheckoutClient';
 
 export default function Page() {
@@ -6,6 +7,7 @@ export default function Page() {
 
   return (
     <main style={{ maxWidth: 1040, margin: '0 auto', padding: '40px 20px 72px' }}>
+      <AnalyticsClient />
       <header style={{ display: 'flex', justifyContent: 'space-between', gap: 20, alignItems: 'center', marginBottom: 42 }}>
         <strong style={{ letterSpacing: '.04em' }}>R.I.C.H.O. SYSTEMS · PAYCORE</strong>
         <span style={{
