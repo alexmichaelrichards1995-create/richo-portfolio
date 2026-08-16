@@ -8,12 +8,25 @@ const FINAL = new Set(['Succeeded', 'No Change', 'Failed', 'Waiting Approval', '
 
 function nowIso(now) { return new Date(now).toISOString(); }
 function runId(taskId, now) {
-  return crypto.createHash('sha256').update(`${taskId}|${nowIso(now)}`).digest('hex').slice(0, 24);
+  return crypto.createHash('sha256')
+    .update(`${taskId}|${nowIso(now)}|${crypto.randomUUID()}`)
+    .digest('hex')
+    .slice(0, 24);
 }
 
 function isDue(task, now) {
   if (!task.Enabled || task.Status !== 'Ready') return false;
-  if (!task.NextDue) return true;
+  if (!task.NextDue) {
+    const cadence = String(task.Cadence || '').trim();
+    if (/^ONCE\s+/i.test(cadence)) {
+      try {
+        return nextDue(cadence, now).getTime() <= now.getTime();
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }
   return new Date(task.NextDue).getTime() <= now.getTime();
 }
 
@@ -80,13 +93,16 @@ class TaskEngine {
   async runTask(task, now = new Date()) {
     const id = task.TaskID || task.id || task.Task;
     const rid = runId(id, now);
-    const lease = await this.store.acquireLease(id, rid, new Date(now.getTime() + this.leaseMs));
+    const lease = await this.store.acquireLease(id, rid, new Date(now.getTime() + this.leaseMs), now);
     if (!lease) return { status: 'Skipped', reason: 'lease_not_acquired' };
 
     const startedAt = nowIso(now);
-    await this.store.recordRun({ runId: rid, taskId: id, startedAt, state: 'RUNNING', attempt: (task.Attempts || 0) + 1 });
+    let runRecorded = false;
 
     try {
+      await this.store.recordRun({ runId: rid, taskId: id, startedAt, state: 'RUNNING', attempt: (task.Attempts || 0) + 1 });
+      runRecorded = true;
+
       if (requiresApproval(task) && !task.OwnerApproved) {
         const result = { status: 'Waiting Approval', message: 'Owner approval required before consequential action.' };
         await this.finish(task, rid, result, now);
@@ -117,7 +133,9 @@ class TaskEngine {
         retryAt: next ? next.toISOString() : null,
         deadLetter: terminal
       };
-      await this.store.completeRun(rid, { state: 'FAILED', finishedAt: nowIso(new Date()), result });
+      if (runRecorded) {
+        await this.store.completeRun(rid, { state: 'FAILED', finishedAt: nowIso(now), result });
+      }
       await this.store.updateTask(id, {
         Status: terminal ? 'Failed' : 'Ready',
         LastResult: result.message,
@@ -142,7 +160,7 @@ class TaskEngine {
       next = nextDue(task.Cadence, now).toISOString();
     }
 
-    await this.store.completeRun(rid, { state: result.status.toUpperCase().replace(' ', '_'), finishedAt: nowIso(new Date()), result });
+    await this.store.completeRun(rid, { state: result.status.toUpperCase().replace(' ', '_'), finishedAt: nowIso(now), result });
     await this.store.updateTask(id, {
       Status: result.status === 'Succeeded' || result.status === 'No Change' ? 'Ready' : result.status,
       LastResult: result.message,
