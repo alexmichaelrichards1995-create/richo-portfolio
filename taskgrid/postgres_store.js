@@ -9,7 +9,7 @@ class PostgresStore {
 
   async listTasks() {
     const { rows } = await this.pool.query(`
-      SELECT task_id AS "TaskID", task_name AS "Task", priority AS "Priority",
+      SELECT task_id AS "TaskID", notion_page_id AS "NotionPageID", task_name AS "Task", priority AS "Priority",
              enabled AS "Enabled", status AS "Status", task_type AS "TaskType",
              cadence AS "Cadence", approval_required AS "ApprovalRequired",
              owner_approved AS "OwnerApproved", instruction AS "Instruction",
@@ -66,6 +66,32 @@ class PostgresStore {
       return `${map[k]}=$${i + 2}`;
     });
     await this.pool.query(`UPDATE taskgrid_tasks SET ${sets.join(', ')}, updated_at=NOW() WHERE task_id=$1`, values);
+  }
+
+  async upsertControlPlaneTask(task) {
+    await this.pool.query(`
+      INSERT INTO taskgrid_tasks(
+        task_id, notion_page_id, task_name, priority, enabled, status, task_type, cadence,
+        source, approval_required, instruction, next_due, last_run, last_result, updated_at
+      ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,NOW())
+      ON CONFLICT (task_id) DO UPDATE SET
+        notion_page_id=EXCLUDED.notion_page_id,
+        task_name=EXCLUDED.task_name,
+        priority=EXCLUDED.priority,
+        enabled=EXCLUDED.enabled,
+        status=CASE WHEN taskgrid_tasks.status='Running' THEN taskgrid_tasks.status ELSE EXCLUDED.status END,
+        task_type=EXCLUDED.task_type,
+        cadence=EXCLUDED.cadence,
+        source=EXCLUDED.source,
+        approval_required=EXCLUDED.approval_required,
+        instruction=EXCLUDED.instruction,
+        next_due=COALESCE(taskgrid_tasks.next_due, EXCLUDED.next_due),
+        updated_at=NOW()
+    `, [
+      task.TaskID, task.NotionPageID || null, task.Task, task.Priority, task.Enabled, task.Status,
+      task.TaskType, task.Cadence, task.Source, task.ApprovalRequired, task.Instruction || null,
+      task.NextDue || null, task.LastRun || null, task.LastResult || null
+    ]);
   }
 
   async deadLetter(entry) {
