@@ -34,18 +34,18 @@ jobs:
           import base64, hashlib
 
           parts = [Path(f'apps/campaign-concept-studio-ci/source.b64.chunk{i:02d}') for i in range(6)]
-          expected_chunk_lengths = [8000, 8000, 8000, 8000, 8000, 4808]
+          expected_chunk_lengths = [8000, 8000, 8000, 8000, 8000, 1264]
           chunks = [p.read_text(encoding='utf-8') for p in parts]
           actual_lengths = [len(x) for x in chunks]
           print('chunk lengths=', actual_lengths)
           if actual_lengths != expected_chunk_lengths:
               raise SystemExit(f'chunk length mismatch: {actual_lengths}')
           raw = ''.join(chunks)
-          if len(raw) != 44808:
+          if len(raw) != 41264:
               raise SystemExit(f'base64 length mismatch: {len(raw)}')
           data = base64.b64decode(raw, validate=True)
-          expected_size = 33606
-          expected_sha = 'c8341a3fb9ac9052d7b74fc81587e87a77882154df814d81cb15b2ec54083b87'
+          expected_size = 30947
+          expected_sha = 'e46bc0d7dd7caaae17e551b20f4a35492788c185c027a0060460dbb2f3d655d2'
           actual_sha = hashlib.sha256(data).hexdigest()
           print(f'payload chars={len(raw)} bytes={len(data)} sha256={actual_sha}')
           if len(data) != expected_size or actual_sha != expected_sha:
@@ -61,9 +61,9 @@ jobs:
         working-directory: .ci/campaign-concept-studio/app
         run: npm install
 
-      - name: Dependency audit report
+      - name: Block high-severity dependency vulnerabilities
         working-directory: .ci/campaign-concept-studio/app
-        run: npm audit --audit-level=high || true
+        run: npm audit --audit-level=high
 
       - name: Mixpanel architecture and privacy gate
         working-directory: .ci/campaign-concept-studio/app
