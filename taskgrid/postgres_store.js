@@ -107,7 +107,9 @@ class PostgresStore {
              COUNT(*) FILTER (WHERE enabled AND status='Ready' AND (next_due IS NULL OR next_due<=NOW())) AS due,
              COUNT(*) FILTER (WHERE status='Waiting Approval') AS waiting_approval,
              COUNT(*) FILTER (WHERE status='Failed') AS failed,
-             EXTRACT(EPOCH FROM (NOW()-MIN(next_due))) FILTER (WHERE enabled AND status='Ready' AND next_due<=NOW()) AS oldest_due_seconds
+             EXTRACT(EPOCH FROM (
+               NOW() - (MIN(next_due) FILTER (WHERE enabled AND status='Ready' AND next_due<=NOW()))
+             )) AS oldest_due_seconds
       FROM taskgrid_tasks
     `);
     return r;
