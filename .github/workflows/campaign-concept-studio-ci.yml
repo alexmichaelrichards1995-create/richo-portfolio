@@ -31,21 +31,23 @@ jobs:
           mkdir -p .ci/campaign-concept-studio
           python - <<'PY'
           from pathlib import Path
-          import base64, hashlib, re
+          import base64, hashlib
 
-          parts = [
-              Path('apps/campaign-concept-studio-ci/source.b64.part00'),
-              Path('apps/campaign-concept-studio-ci/source.b64.part01'),
-          ]
-          raw = ''.join(p.read_text(encoding='utf-8') for p in parts)
-          clean = re.sub(r'[^A-Za-z0-9+/=]', '', raw)
-          clean = clean.rstrip('=')
-          clean += '=' * ((4 - len(clean) % 4) % 4)
-          data = base64.b64decode(clean, validate=False)
+          parts = [Path(f'apps/campaign-concept-studio-ci/source.b64.chunk{i:02d}') for i in range(6)]
+          expected_chunk_lengths = [8000, 8000, 8000, 8000, 8000, 4808]
+          chunks = [p.read_text(encoding='utf-8') for p in parts]
+          actual_lengths = [len(x) for x in chunks]
+          print('chunk lengths=', actual_lengths)
+          if actual_lengths != expected_chunk_lengths:
+              raise SystemExit(f'chunk length mismatch: {actual_lengths}')
+          raw = ''.join(chunks)
+          if len(raw) != 44808:
+              raise SystemExit(f'base64 length mismatch: {len(raw)}')
+          data = base64.b64decode(raw, validate=True)
           expected_size = 33606
           expected_sha = 'c8341a3fb9ac9052d7b74fc81587e87a77882154df814d81cb15b2ec54083b87'
           actual_sha = hashlib.sha256(data).hexdigest()
-          print(f'payload chars={len(raw)} cleaned={len(clean)} bytes={len(data)} sha256={actual_sha}')
+          print(f'payload chars={len(raw)} bytes={len(data)} sha256={actual_sha}')
           if len(data) != expected_size or actual_sha != expected_sha:
               raise SystemExit('staged payload integrity mismatch')
           Path('.ci/campaign-concept-studio/source.zip').write_bytes(data)
