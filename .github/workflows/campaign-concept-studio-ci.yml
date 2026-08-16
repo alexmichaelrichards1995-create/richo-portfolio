@@ -63,7 +63,7 @@ jobs:
 
       - name: Mixpanel architecture and privacy gate
         working-directory: .ci/campaign-concept-studio/app
-        run: npm run static-check
+        run: npm run check:architecture
 
       - name: Typecheck and production build
         working-directory: .ci/campaign-concept-studio/app
