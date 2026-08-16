@@ -2,7 +2,7 @@
 
 const assert = require('assert');
 const { nextDue } = require('../taskgrid/cadence');
-const { TaskEngine, sortDue, requiresApproval } = require('../taskgrid/engine');
+const { TaskEngine, sortDue, requiresApproval, isDue } = require('../taskgrid/engine');
 const { MemoryStore } = require('../taskgrid/memory_store');
 
 function task(id, priority = 'P2', extra = {}) {
@@ -25,6 +25,9 @@ function task(id, priority = 'P2', extra = {}) {
   assert.strictEqual(nextDue('EVERY 6 HOURS', base).toISOString(), '2026-08-16T16:00:00.000Z');
   assert.strictEqual(nextDue('DAILY 08:00', base).toISOString(), '2026-08-16T22:00:00.000Z');
   assert.throws(() => nextDue('Daily and after connector errors', base), /unsupported_cadence/);
+
+  assert.strictEqual(isDue(task('once-future', 'P1', { Cadence: 'ONCE 2026-08-16T11:00:00Z' }), base), false);
+  assert.strictEqual(isDue(task('once-now', 'P1', { Cadence: 'ONCE 2026-08-16T10:00:00Z' }), base), true);
 
   const sorted = sortDue([task('p3', 'P3'), task('p0', 'P0'), task('p1', 'P1')], base);
   assert.deepStrictEqual(sorted.map(x => x.TaskID), ['p0', 'p1', 'p3']);
@@ -62,8 +65,33 @@ function task(id, priority = 'P2', extra = {}) {
   assert.strictEqual(once.Enabled, false);
 
   const leaseStore = new MemoryStore([task('lease')]);
-  assert.strictEqual(await leaseStore.acquireLease('lease', 'run-a', new Date(Date.now() + 60000)), true);
-  assert.strictEqual(await leaseStore.acquireLease('lease', 'run-b', new Date(Date.now() + 60000)), false);
+  assert.strictEqual(await leaseStore.acquireLease('lease', 'run-a', new Date(base.getTime() + 60000), base), true);
+  assert.strictEqual(await leaseStore.acquireLease('lease', 'run-b', new Date(base.getTime() + 61000), new Date(base.getTime() + 1000)), false);
+  assert.strictEqual(await leaseStore.acquireLease('lease', 'run-c', new Date(base.getTime() + 121000), new Date(base.getTime() + 61000)), true);
+
+  const repeatTask = task('repeat');
+  const repeatStore = new MemoryStore([repeatTask]);
+  const repeatEngine = new TaskEngine({
+    store: repeatStore,
+    adapters: { 'Condition Watch': async () => ({ status: 'Succeeded', message: 'ok' }) }
+  });
+  await repeatEngine.runTask(repeatTask, base);
+  await repeatEngine.runTask(repeatTask, base);
+  assert.strictEqual(repeatStore.runs.size, 2);
+  assert.strictEqual(new Set([...repeatStore.runs.keys()]).size, 2);
+
+  class RecordFailureStore extends MemoryStore {
+    async recordRun() { throw new Error('record_run_failed'); }
+  }
+  const failureTask = task('record-failure');
+  const failureStore = new RecordFailureStore([failureTask]);
+  const failureEngine = new TaskEngine({
+    store: failureStore,
+    adapters: { 'Condition Watch': async () => ({ status: 'Succeeded' }) }
+  });
+  const failure = await failureEngine.runTask(failureTask, base);
+  assert.strictEqual(failure.status, 'Failed');
+  assert.strictEqual(failureStore.leases.size, 0);
 
   console.log('taskgrid_store_room.test.js: PASS');
 })().catch(err => {
