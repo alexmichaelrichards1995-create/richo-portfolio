@@ -3,15 +3,15 @@
 const assert = require('assert');
 const { NotionAdapter } = require('../taskgrid/notion_adapter');
 
-function page(id, number, priority, ownerApproved = false) {
+function page(id, number, priority, ownerApproved = false, enabled = true) {
   return {
     id,
     properties: {
       'Task ID': { unique_id: { prefix: 'TG', number } },
       Task: { title: [{ plain_text: `Task ${number}` }] },
       Priority: { select: { name: priority } },
-      Enabled: { checkbox: true },
-      Status: { select: { name: 'Ready' } },
+      Enabled: { checkbox: enabled },
+      Status: { select: { name: enabled ? 'Ready' : 'Paused' } },
       'Task Type': { select: { name: 'Condition Watch' } },
       Cadence: { rich_text: [{ plain_text: 'HOURLY' }] },
       Source: { select: { name: 'ChatGPT Dispatcher' } },
@@ -29,8 +29,8 @@ function page(id, number, priority, ownerApproved = false) {
 (async () => {
   const calls = [];
   const responses = [
-    { ok: true, json: async () => ({ results: [page('p1', 1, 'P0', true)], has_more: true, next_cursor: 'cursor-2' }) },
-    { ok: true, json: async () => ({ results: [page('p2', 2, 'P2')], has_more: false, next_cursor: null }) }
+    { ok: true, json: async () => ({ results: [page('p1', 1, 'P0', true, true)], has_more: true, next_cursor: 'cursor-2' }) },
+    { ok: true, json: async () => ({ results: [page('p2', 2, 'P2', false, false)], has_more: false, next_cursor: null }) }
   ];
   const fetchImpl = async (url, init) => {
     calls.push({ url, init, body: JSON.parse(init.body) });
@@ -43,13 +43,15 @@ function page(id, number, priority, ownerApproved = false) {
   assert.strictEqual(tasks[0].TaskID, 'TG-1');
   assert.strictEqual(tasks[0].Priority, 'P0');
   assert.strictEqual(tasks[0].OwnerApproved, true);
+  assert.strictEqual(tasks[0].Enabled, true);
   assert.strictEqual(tasks[1].TaskID, 'TG-2');
   assert.strictEqual(tasks[1].OwnerApproved, false);
+  assert.strictEqual(tasks[1].Enabled, false);
   assert.strictEqual(calls.length, 2);
   assert.strictEqual(calls[0].body.page_size, 1);
   assert.strictEqual(calls[1].body.start_cursor, 'cursor-2');
-  assert.strictEqual(calls[0].body.filter.and[0].select.equals, 'ChatGPT Dispatcher');
-  assert.strictEqual(calls[0].body.filter.and[1].checkbox.equals, true);
+  assert.strictEqual(calls[0].body.filter.property, 'Source');
+  assert.strictEqual(calls[0].body.filter.select.equals, 'ChatGPT Dispatcher');
 
   let patchBody;
   const patchAdapter = new NotionAdapter({
