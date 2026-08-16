@@ -24,6 +24,10 @@ Validated on the isolated `campaign-concept-studio-mixpanel` branch.
 - Autocapture and Session Replay remain disabled.
 - Campaign brief/audience/product free text, generated copy, image prompts, image payloads, raw upstream errors, and OpenAI credentials are not permitted Mixpanel event properties.
 
+## Verified CI result
+
+The hardened CI run passed archive integrity, dependency installation, blocking high-severity audit, Mixpanel architecture/privacy validation, TypeScript checking, and optimized production build.
+
 ## Production status
 
-CI validation is green. This record does not authorize merging or production deployment by itself.
+Validated and review-ready. This record does not authorize merging or production deployment by itself.
