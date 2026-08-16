@@ -1,0 +1,52 @@
+name: Campaign Concept Studio CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/campaign-concept-studio-ci/**"
+      - ".github/workflows/campaign-concept-studio-ci.yml"
+  push:
+    branches:
+      - campaign-concept-studio-mixpanel
+    paths:
+      - "apps/campaign-concept-studio-ci/**"
+      - ".github/workflows/campaign-concept-studio-ci.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Reconstruct validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci/campaign-concept-studio
+          cat apps/campaign-concept-studio-ci/source.b64.part00 \
+              apps/campaign-concept-studio-ci/source.b64.part01 \
+            | base64 --decode > .ci/campaign-concept-studio/source.zip
+          unzip -q .ci/campaign-concept-studio/source.zip -d .ci/campaign-concept-studio/app
+          test ! -f .ci/campaign-concept-studio/app/.env.local
+          test ! -f .ci/campaign-concept-studio/app/tsconfig.tsbuildinfo
+
+      - name: Install dependencies
+        working-directory: .ci/campaign-concept-studio/app
+        run: npm install
+
+      - name: Mixpanel architecture and privacy gate
+        working-directory: .ci/campaign-concept-studio/app
+        run: npm run static-check
+
+      - name: Typecheck and production build
+        working-directory: .ci/campaign-concept-studio/app
+        env:
+          OPENAI_API_KEY: sk-build-placeholder-not-used-at-runtime
+          NEXT_PUBLIC_MIXPANEL_TOKEN: 3b6b0d8beffe6a2d1d774f6f7aab3041
+        run: npm run validate
