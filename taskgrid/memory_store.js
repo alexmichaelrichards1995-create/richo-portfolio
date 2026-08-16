@@ -10,10 +10,11 @@ class MemoryStore {
 
   async listTasks() { return [...this.tasks.values()].map(t => ({ ...t })); }
 
-  async acquireLease(taskId, runId, expiresAt) {
+  async acquireLease(taskId, runId, expiresAt, now = new Date()) {
     const current = this.leases.get(taskId);
-    const now = Date.now();
-    if (current && new Date(current.expiresAt).getTime() > now && current.runId !== runId) return false;
+    const reference = new Date(now).getTime();
+    if (Number.isNaN(reference)) throw new Error('invalid_lease_now');
+    if (current && new Date(current.expiresAt).getTime() > reference && current.runId !== runId) return false;
     this.leases.set(taskId, { runId, expiresAt: expiresAt.toISOString() });
     return true;
   }
