@@ -37,6 +37,18 @@ function backoffMs(attempt) {
   return Math.min(6 * 60 * 60 * 1000, base * Math.pow(2, Math.max(0, attempt - 1)));
 }
 
+async function withTimeout(execution, timeoutMs) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(Object.assign(new Error('task_timeout'), { classification: 'TIMEOUT' })), timeoutMs);
+  });
+  try {
+    return await Promise.race([execution, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 class TaskEngine {
   constructor({ store, adapters = {}, batchSize = 20, leaseMs = 10 * 60 * 1000, timeoutMs = 2 * 60 * 1000, connectorCaps = {} }) {
     if (!store) throw new Error('store_required');
@@ -85,8 +97,7 @@ class TaskEngine {
       if (!adapter) throw Object.assign(new Error('adapter_unavailable'), { classification: 'CONFIGURATION' });
 
       const execution = Promise.resolve(adapter(task, { runId: rid, now }));
-      const timeout = new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('task_timeout'), { classification: 'TIMEOUT' })), this.timeoutMs));
-      const result = await Promise.race([execution, timeout]);
+      const result = await withTimeout(execution, this.timeoutMs);
       const normalized = {
         status: FINAL.has(result?.status) ? result.status : 'Succeeded',
         message: String(result?.message || 'completed').slice(0, 4000),
@@ -143,4 +154,4 @@ class TaskEngine {
   }
 }
 
-module.exports = { TaskEngine, sortDue, isDue, backoffMs, requiresApproval };
+module.exports = { TaskEngine, sortDue, isDue, backoffMs, requiresApproval, withTimeout };
