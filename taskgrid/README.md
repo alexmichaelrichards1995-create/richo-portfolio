@@ -1,55 +1,89 @@
 # R.I.C.H.O. Passive Task Store Room
 
-This module turns the existing TaskGrid model into a bounded dispatcher over a large task registry. It does **not** claim unlimited compute. The registry may hold many rows, while each dispatcher cycle processes at most 20 due tasks and carries the remainder forward.
+The Passive Task Store Room lets a large TaskGrid registry be serviced by one bounded dispatcher instead of consuming one platform automation slot per stored task.
 
-## Core controls
+## Execution model
 
-- Priority ordering: P0 → P1 → P2 → P3.
-- Due-state gate: only `Enabled=true`, `Status=Ready` tasks are eligible.
-- Deterministic Australia/Brisbane cadence handling for `HOURLY`, `EVERY N HOURS`, `DAILY`, `DAILY HH:MM`, `WEEKLY`, `WEEKLY <day list> HH:MM`, and `ONCE <timestamp>`.
-- Per-task leases prevent concurrent duplicate execution.
-- Durable run IDs and run records support evidence/audit adapters.
-- Bounded exponential retry with terminal dead-letter behavior.
-- Consequential `Owner Action` tasks and rows marked `Approval Required` stop in `Waiting Approval` unless owner approval is explicitly present in the execution record.
-- Condition-watch adapters may return `No Change`; notification policy belongs to the adapter/dispatcher and should remain silent for no-change outcomes.
-- `selfDisable=true` supports one-shot watches such as “Stripe verification approved”.
-- No credentials or provider secrets are stored in this source tree.
+- Human-facing control plane: Notion `R.I.C.H.O. TaskGrid Registry`.
+- Durable execution state: PostgreSQL via `PostgresStore`.
+- Dispatcher priority: `P0`, `P1`, `P2`, `P3`.
+- Hard execution ceiling: **20 due tasks per cycle**.
+- Excess due work remains queued for later cycles.
+- Supported cadence grammar: `HOURLY`, `EVERY N HOURS`, `DAILY`, `DAILY HH:MM`, `WEEKLY`, `WEEKLY MON,WED HH:MM`, and `ONCE <timestamp>`.
+- Scheduling timezone: `Australia/Brisbane`.
+- `ONCE` tasks without a populated `NextDue` are not executable before their cadence timestamp.
 
-## Production components
+## Safety and durability
 
-- `engine.js` — bounded priority dispatcher.
-- `cadence.js` — deterministic Brisbane-time scheduler.
-- `memory_store.js` — deterministic local/test store.
-- `postgres_store.js` — transactional task, lease, run, dead-letter and metrics store.
-- `notion_adapter.js` — paginated reader/writer for the Notion TaskGrid Registry.
-- `sync.js` — Notion → durable-store synchronization.
-- `control_plane_store.js` — durable state first, Notion mirror second; control-plane mirror failure never rolls back durable state.
-- `http.js` — `/health`, `/ready`, `/metrics`, plus token-protected internal sync/cycle endpoints.
-- `migrations/003_taskgrid_store_room.sql` — PostgreSQL schema and indexes.
+- Per-task leases suppress concurrent duplicate execution.
+- Run IDs are unique per execution attempt, including attempts started at the same task timestamp.
+- Lease release is protected by `finally`, including failures while creating the run receipt.
+- The in-memory store accepts the engine's simulated time for deterministic lease tests.
+- Bounded exponential retry and dead-letter handling are supported.
+- Condition-watch `No Change` results remain silent at the adapter/notification layer.
+- Tasks can self-disable after a terminal condition is satisfied.
+- `Owner Action` and `ApprovalRequired` tasks fail closed into `Waiting Approval` unless explicitly approved.
+- The A$48,000 payment lane remains owner-reviewed and is never an automatic debit path.
+- Internal `/sync` and `/cycle` endpoints require `TASKGRID_INTERNAL_TOKEN` and fail closed when it is absent.
+- No provider credentials or API secrets are stored in source.
+
+## Components
+
+- `cadence.js` — deterministic Brisbane scheduling.
+- `engine.js` — selection, leases, unique attempt IDs, timeouts, retries, owner gate, receipts.
+- `memory_store.js` — deterministic test store.
+- `postgres_store.js` — durable tasks, leases, runs, dead letters and queue metrics.
+- `notion_adapter.js` — paginated Notion TaskGrid reader/writer contract.
+- `sync.js` — control-plane synchronizer.
+- `control_plane_store.js` — durable-store/Notion bridge.
+- `http.js` — health, readiness, metrics and authenticated internal control endpoints.
+- `../migrations/003_taskgrid_store_room.sql` — PostgreSQL schema.
 
 ## Environment contract
 
-- `DATABASE_URL` — PostgreSQL connection string.
-- `NOTION_TOKEN` — server-side Notion integration token. Never commit it.
-- `NOTION_TASKGRID_DATA_SOURCE_ID` — TaskGrid data-source ID.
-- `TASKGRID_INTERNAL_TOKEN` — random secret for internal sync/cycle endpoints.
+Production wiring is environment-driven. Do not commit values.
 
-## Safety boundary
-
-The engine does not automatically send mail, publish, deploy, charge cards, issue refunds, alter account/security settings, accept legal terms, or perform other consequential external actions. Those capabilities must be supplied by explicit adapters and remain owner-gated.
-
-The A$48,000 R.I.C.H.O. offer remains owner-reviewed and must never be auto-debited by a TaskGrid adapter.
-
-## Deployment truth
-
-The code now includes the Notion and PostgreSQL production adapter layers, but they are not live until environment secrets are installed, migration 003 is applied, the service is deployed, and live readiness/sync tests pass. Do not label this VERIFIED_LIVE before those gates are evidenced.
-
-## Tests
-
-Run:
-
-```bash
-node tests/taskgrid_store_room.test.js
+```text
+DATABASE_URL=<postgres connection string>
+NOTION_TOKEN=<Notion integration secret>
+TASKGRID_NOTION_DATA_SOURCE_ID=<TaskGrid data source id>
+TASKGRID_INTERNAL_TOKEN=<high-entropy internal control token>
+PORT=<optional service port>
 ```
 
-The regression test covers cadence parsing, unsupported cadence rejection, priority ordering, the 20-task batch ceiling, backlog carry-over, owner approval waiting, self-disable, and duplicate lease suppression.
+Deployment must install those values in the target platform's encrypted secret store. They should not be pasted into source files, issue comments, pull-request bodies, logs, or chat.
+
+## CI gates
+
+`.github/workflows/taskgrid-ci.yml` verifies:
+
+- PostgreSQL 16 service readiness;
+- schema application twice for migration idempotency;
+- deterministic dispatcher/regression tests;
+- future `ONCE` suppression;
+- unique same-timestamp run IDs;
+- lease release when `recordRun` fails;
+- deterministic memory-store lease expiry;
+- Notion adapter contract tests;
+- PostgreSQL durability/lease integration tests;
+- internal-token fail-closed behavior;
+- TaskGrid committed-secret scanning.
+
+CI does **not** prove a production Notion connection, production database connectivity, provider credentials, or external live actions.
+
+## Production release gate
+
+Do not label the Store Room `VERIFIED_LIVE` until all of the following are evidenced in the target deployment:
+
+1. encrypted `DATABASE_URL`, `NOTION_TOKEN`, `TASKGRID_NOTION_DATA_SOURCE_ID`, and `TASKGRID_INTERNAL_TOKEN` are installed;
+2. migration is applied to the intended production database;
+3. `/health` responds successfully;
+4. `/ready` proves durable storage reachable;
+5. authenticated `/internal/sync` completes against the intended Notion registry;
+6. authenticated `/internal/cycle` processes a controlled non-consequential test task;
+7. a durable run receipt is present;
+8. duplicate/concurrent replay is suppressed;
+9. no owner-gated consequential task executes without approval;
+10. logs contain no credentials or sensitive task payloads.
+
+Until those gates are demonstrated, the correct state is `CODED_AND_CI_VERIFIED_NOT_DEPLOYED` once CI is green.
