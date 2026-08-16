@@ -87,10 +87,36 @@ jobs:
 
       - name: Verify no committed TaskGrid secrets
         run: |
-          if grep -RInE '(secret|token|api[_-]?key)\s*[:=]\s*["'"'][A-Za-z0-9_-]{20,}' taskgrid migrations/003_taskgrid_store_room.sql; then
-            echo 'Potential committed secret detected.' >&2
-            exit 1
-          fi
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const roots = ['taskgrid', 'migrations/003_taskgrid_store_room.sql'];
+          const files = [];
+          function walk(p) {
+            const stat = fs.statSync(p);
+            if (stat.isDirectory()) {
+              for (const name of fs.readdirSync(p)) walk(path.join(p, name));
+            } else {
+              files.push(p);
+            }
+          }
+          for (const root of roots) walk(root);
+          const assignment = /(secret|token|api[_-]?key)\s*[:=]\s*["']([A-Za-z0-9_\-./+=]{20,})["']/ig;
+          const findings = [];
+          for (const file of files) {
+            const text = fs.readFileSync(file, 'utf8');
+            let match;
+            while ((match = assignment.exec(text)) !== null) {
+              findings.push(`${file}:${match.index}:${match[1]}`);
+            }
+          }
+          if (findings.length) {
+            console.error('Potential committed TaskGrid secret literal detected:');
+            for (const finding of findings) console.error(finding);
+            process.exit(1);
+          }
+          console.log('taskgrid committed-secret scan: PASS');
+          NODE
 
       - name: TaskGrid CI receipt
         run: |
@@ -101,5 +127,6 @@ jobs:
             'LEASE_DUPLICATE_SUPPRESSION=PASS' \
             'MIGRATION_IDEMPOTENCY=PASS' \
             'INTERNAL_AUTH_FAIL_CLOSED=PASS' \
+            'COMMITTED_SECRET_SCAN=PASS' \
             'BATCH_CEILING=20' \
             'LIVE_PROVIDER_ACTIONS=NOT_EXERCISED'
