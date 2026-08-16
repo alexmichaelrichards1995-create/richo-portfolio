@@ -4,7 +4,7 @@
   "scripts": {
     "migrate": "bash scripts/run_migrations.sh",
     "test:runtime": "node tests/smoke.mjs",
-    "test": "node tests/smoke.mjs && node tests/db_migrations.test.js && node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js && node tests/stripe_integration.test.js && node tests/stripe_connect.integration.test.js"
+    "test": "node tests/smoke.mjs && node tests/db_ssl_mode.test.js && node tests/db_migrations.test.js && node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js && node tests/stripe_integration.test.js && node tests/stripe_connect.integration.test.js"
   },
   "dependencies": {
     "express": "^4.18.2",
