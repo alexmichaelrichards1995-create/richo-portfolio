@@ -79,6 +79,8 @@ export function loadConfig(env = process.env) {
     webhookSecret: required(env, 'STRIPE_WEBHOOK_SECRET'),
     mode,
     gstRegistered: gstRegistered === 'true',
+    browserPosthogProjectToken: required(env, 'NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN'),
+    browserPosthogHost: String(env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com').replace(/\/$/, ''),
     posthogProjectToken: String(env.POSTHOG_PROJECT_TOKEN || '').trim() || null,
     posthogHost: String(env.POSTHOG_HOST || 'https://us.i.posthog.com').replace(/\/$/, ''),
     links: Object.freeze(links),
