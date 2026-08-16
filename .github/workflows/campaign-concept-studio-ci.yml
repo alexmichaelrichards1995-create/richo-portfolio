@@ -61,6 +61,10 @@ jobs:
         working-directory: .ci/campaign-concept-studio/app
         run: npm install
 
+      - name: Dependency audit report
+        working-directory: .ci/campaign-concept-studio/app
+        run: npm audit --audit-level=high || true
+
       - name: Mixpanel architecture and privacy gate
         working-directory: .ci/campaign-concept-studio/app
         run: npm run check:architecture
