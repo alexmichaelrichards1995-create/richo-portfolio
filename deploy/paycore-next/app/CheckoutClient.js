@@ -1,9 +1,11 @@
 'use client';
 
+import { captureRichoEvent } from './AnalyticsClient';
+
 const offers = [
-  { slug: 'quick-wins-kit', name: 'R.I.C.H.O. AI Business Quick-Wins Kit', price: 'A$19' },
-  { slug: 'ai-quick-fix', name: 'AI Quick Fix for Small Business', price: 'A$49' },
-  { slug: 'ai-quick-fix-session', name: 'AI Quick Fix Session', price: 'A$197' },
+  { slug: 'quick-wins-kit', sku: 'RSP-056', name: 'R.I.C.H.O. AI Business Quick-Wins Kit', price: 'A$19' },
+  { slug: 'ai-quick-fix', sku: 'RICHO-AQF-COURSE', name: 'AI Quick Fix for Small Business', price: 'A$49' },
+  { slug: 'ai-quick-fix-session', sku: 'RICHO-AQF-SESSION', name: 'AI Quick Fix Session', price: 'A$197' },
 ];
 
 function safeStripeUrl(raw) {
@@ -18,13 +20,19 @@ function safeStripeUrl(raw) {
 }
 
 export default function CheckoutClient() {
-  async function start(slug, button) {
+  async function start(offer, button) {
     button.disabled = true;
     const status = document.getElementById('checkout-status');
 
+    captureRichoEvent('richo_cta_clicked', {
+      cta: 'open_secure_checkout',
+      offer_slug: offer.slug,
+      sku: offer.sku,
+    });
+
     try {
-      const requestKey = `richo-${slug}-${crypto.randomUUID()}`;
-      const response = await fetch(`/api/checkout/${encodeURIComponent(slug)}`, {
+      const requestKey = `richo-${offer.slug}-${crypto.randomUUID()}`;
+      const response = await fetch(`/api/checkout/${encodeURIComponent(offer.slug)}`, {
         method: 'POST',
         headers: {
           Accept: 'application/json',
@@ -39,9 +47,22 @@ export default function CheckoutClient() {
       const checkoutUrl = safeStripeUrl(payload.checkoutUrl);
       if (!checkoutUrl) throw new Error('unsafe_checkout_url');
 
+      await captureRichoEvent('richo_checkout_started', {
+        offer_slug: offer.slug,
+        sku: payload.sku || offer.sku,
+        amount_minor: payload.amountMinor,
+        currency: payload.currency,
+        payment_mode: payload.paymentMode,
+      });
+
       status.textContent = 'PayCore intent created. Opening secure Stripe checkout…';
       location.assign(checkoutUrl);
     } catch (error) {
+      captureRichoEvent('richo_checkout_failed', {
+        offer_slug: offer.slug,
+        sku: offer.sku,
+        reason: String(error?.message || 'checkout_unavailable').slice(0, 120),
+      });
       status.textContent = `Checkout unavailable: ${error.message}`;
       button.disabled = false;
     }
@@ -56,7 +77,7 @@ export default function CheckoutClient() {
             <div style={{ fontSize: 32, fontWeight: 850, margin: '18px 0' }}>{offer.price}</div>
             <button
               type="button"
-              onClick={event => start(offer.slug, event.currentTarget)}
+              onClick={event => start(offer, event.currentTarget)}
               style={{ width: '100%', border: 0, borderRadius: 12, padding: '13px 16px', background: '#101828', color: '#fff', fontWeight: 750, cursor: 'pointer' }}
             >
               Open secure checkout
