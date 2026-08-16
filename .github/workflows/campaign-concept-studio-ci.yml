@@ -1,0 +1,77 @@
+name: Campaign Concept Studio CI
+
+on:
+  pull_request:
+    paths:
+      - "apps/campaign-concept-studio-ci/**"
+      - ".github/workflows/campaign-concept-studio-ci.yml"
+  push:
+    branches:
+      - campaign-concept-studio-mixpanel
+    paths:
+      - "apps/campaign-concept-studio-ci/**"
+      - ".github/workflows/campaign-concept-studio-ci.yml"
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Reconstruct validated source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .ci/campaign-concept-studio
+          python - <<'PY'
+          from pathlib import Path
+          import base64, hashlib
+
+          parts = [Path(f'apps/campaign-concept-studio-ci/source.b64.chunk{i:02d}') for i in range(6)]
+          expected_chunk_lengths = [8000, 8000, 8000, 8000, 8000, 1264]
+          chunks = [p.read_text(encoding='utf-8') for p in parts]
+          actual_lengths = [len(x) for x in chunks]
+          print('chunk lengths=', actual_lengths)
+          if actual_lengths != expected_chunk_lengths:
+              raise SystemExit(f'chunk length mismatch: {actual_lengths}')
+          raw = ''.join(chunks)
+          if len(raw) != 41264:
+              raise SystemExit(f'base64 length mismatch: {len(raw)}')
+          data = base64.b64decode(raw, validate=True)
+          expected_size = 30947
+          expected_sha = 'e46bc0d7dd7caaae17e551b20f4a35492788c185c027a0060460dbb2f3d655d2'
+          actual_sha = hashlib.sha256(data).hexdigest()
+          print(f'payload chars={len(raw)} bytes={len(data)} sha256={actual_sha}')
+          if len(data) != expected_size or actual_sha != expected_sha:
+              raise SystemExit('staged payload integrity mismatch')
+          Path('.ci/campaign-concept-studio/source.zip').write_bytes(data)
+          PY
+          unzip -tq .ci/campaign-concept-studio/source.zip
+          unzip -q .ci/campaign-concept-studio/source.zip -d .ci/campaign-concept-studio/app
+          test ! -f .ci/campaign-concept-studio/app/.env.local
+          test ! -f .ci/campaign-concept-studio/app/tsconfig.tsbuildinfo
+
+      - name: Install dependencies
+        working-directory: .ci/campaign-concept-studio/app
+        run: npm install
+
+      - name: Block high-severity dependency vulnerabilities
+        working-directory: .ci/campaign-concept-studio/app
+        run: npm audit --audit-level=high
+
+      - name: Mixpanel architecture and privacy gate
+        working-directory: .ci/campaign-concept-studio/app
+        run: npm run check:architecture
+
+      - name: Typecheck and production build
+        working-directory: .ci/campaign-concept-studio/app
+        env:
+          OPENAI_API_KEY: sk-build-placeholder-not-used-at-runtime
+          NEXT_PUBLIC_MIXPANEL_TOKEN: 3b6b0d8beffe6a2d1d774f6f7aab3041
+        run: npm run validate
