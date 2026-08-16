@@ -72,12 +72,9 @@ class NotionAdapter {
     do {
       const body = {
         page_size: Math.min(100, Math.max(1, pageSize)),
-        filter: {
-          and: [
-            { property: 'Source', select: { equals: 'ChatGPT Dispatcher' } },
-            { property: 'Enabled', checkbox: { equals: true } }
-          ]
-        },
+        // Fetch enabled and disabled dispatcher rows so a pause/disable made in
+        // Notion propagates into durable execution state on the next sync.
+        filter: { property: 'Source', select: { equals: 'ChatGPT Dispatcher' } },
         sorts: [
           { property: 'Priority', direction: 'ascending' },
           { property: 'Next Due', direction: 'ascending' }
