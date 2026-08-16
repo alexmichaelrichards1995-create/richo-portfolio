@@ -1,4 +1,4 @@
-' strict';
+'use strict';
 
 const crypto = require('crypto');
 const { nextDue } = require('./cadence');
