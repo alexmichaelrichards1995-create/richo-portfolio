@@ -29,10 +29,27 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .ci/campaign-concept-studio
-          cat apps/campaign-concept-studio-ci/source.b64.part00 \
-              apps/campaign-concept-studio-ci/source.b64.part01 \
-            | base64 --ignore-garbage --decode > .ci/campaign-concept-studio/source.zip
-          test "$(wc -c < .ci/campaign-concept-studio/source.zip)" -gt 30000
+          python - <<'PY'
+          from pathlib import Path
+          import base64, hashlib, re
+
+          parts = [
+              Path('apps/campaign-concept-studio-ci/source.b64.part00'),
+              Path('apps/campaign-concept-studio-ci/source.b64.part01'),
+          ]
+          raw = ''.join(p.read_text(encoding='utf-8') for p in parts)
+          clean = re.sub(r'[^A-Za-z0-9+/=]', '', raw)
+          clean = clean.rstrip('=')
+          clean += '=' * ((4 - len(clean) % 4) % 4)
+          data = base64.b64decode(clean, validate=False)
+          expected_size = 33606
+          expected_sha = 'c8341a3fb9ac9052d7b74fc81587e87a77882154df814d81cb15b2ec54083b87'
+          actual_sha = hashlib.sha256(data).hexdigest()
+          print(f'payload chars={len(raw)} cleaned={len(clean)} bytes={len(data)} sha256={actual_sha}')
+          if len(data) != expected_size or actual_sha != expected_sha:
+              raise SystemExit('staged payload integrity mismatch')
+          Path('.ci/campaign-concept-studio/source.zip').write_bytes(data)
+          PY
           unzip -tq .ci/campaign-concept-studio/source.zip
           unzip -q .ci/campaign-concept-studio/source.zip -d .ci/campaign-concept-studio/app
           test ! -f .ci/campaign-concept-studio/app/.env.local
