@@ -10,6 +10,7 @@ on:
       - 'components/**'
       - 'lib/**'
       - 'tests/billing-security-contract.mjs'
+      - 'tests/stripe-mock-integration.mjs'
       - 'proxy.ts'
       - 'next.config.ts'
       - 'package.json'
@@ -23,9 +24,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    services:
+      stripe-mock:
+        image: stripe/stripe-mock:v0.202.0
+        ports:
+          - 12111:12111
     env:
       NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
       NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_placeholder
+      STRIPE_MODE: test
+      STRIPE_RESTRICTED_KEY: sk_test_richo_ci_mock_only
+      STRIPE_TEST_MOCK_ENABLED: 'true'
+      STRIPE_TEST_MOCK_HOST: 127.0.0.1
+      STRIPE_TEST_MOCK_PORT: '12111'
 
     steps:
       - name: Checkout
@@ -41,6 +52,9 @@ jobs:
 
       - name: Billing security contract
         run: npm run test:billing
+
+      - name: Stripe mock request integration
+        run: npm run test:stripe-mock
 
       - name: Typecheck
         run: npm run typecheck
