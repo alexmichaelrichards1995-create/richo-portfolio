@@ -4,6 +4,16 @@ import Stripe from 'stripe'
 
 export type StripeMode = 'test' | 'live'
 
+type StripeTransportConfig = {
+  transportId: string
+  host?: string
+  port?: number
+  protocol?: 'http' | 'https'
+  telemetry?: boolean
+  maxNetworkRetries: number
+  timeout: number
+}
+
 let stripeClient: Stripe | null = null
 let stripeClientMode: StripeMode | null = null
 let stripeClientTransport: string | null = null
@@ -41,7 +51,7 @@ function assertStripeKeyMode(key: string) {
   return configured
 }
 
-function stripeTransport(mode: StripeMode): Stripe.StripeConfig & { transportId: string } {
+function stripeTransport(mode: StripeMode): StripeTransportConfig {
   const useMock = process.env.STRIPE_TEST_MOCK_ENABLED === 'true'
 
   if (!useMock) {
