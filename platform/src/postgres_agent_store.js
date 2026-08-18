@@ -9,7 +9,7 @@ class PostgresAgentStore {
   async enqueue(job) {
     const sql = `
       INSERT INTO richo_agent_jobs (
-        id, section_id, agent_id, trigger_name, operation, payload, context,
+        id, section_id, agent_id, trigger, operation, payload, context,
         priority, max_attempts, idempotency_key, correlation_id, causation_id,
         available_at, status
       ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9,$10,$11,$12,$13,'queued')
@@ -111,24 +111,24 @@ class PostgresAgentStore {
 
   async recordReceipt(receipt) {
     await this.pool.query(`
-      INSERT INTO richo_agent_receipts (
+      INSERT INTO richo_agent_run_receipts (
         id, job_id, section_id, agent_id, run_number, status, policy_decision,
         started_at, completed_at, evidence, error
       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb)`, [
         receipt.id, receipt.jobId, receipt.sectionId, receipt.agentId, receipt.runNumber,
         receipt.status, receipt.policyDecision || null, receipt.startedAt, receipt.completedAt,
-        JSON.stringify(receipt.evidence || null), JSON.stringify(receipt.error || null)
+        JSON.stringify(receipt.evidence || {}), JSON.stringify(receipt.error || null)
       ]);
   }
 
   async recordHealth(finding) {
     await this.pool.query(`
-      INSERT INTO richo_agent_health (
-        id, agent_id, section_id, check_name, health_state, stale, checked_at, details
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`, [
-        finding.id, finding.agentId, finding.sectionId, finding.checkName,
-        finding.healthState, Boolean(finding.stale), finding.checkedAt,
-        JSON.stringify(finding.details || {})
+      INSERT INTO richo_agent_health_events (
+        id, agent_id, section_id, health_state, check_name, detail, recorded_at
+      ) VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7)`, [
+        finding.id, finding.agentId, finding.sectionId, finding.healthState,
+        finding.checkName, JSON.stringify({ stale: Boolean(finding.stale), ...(finding.details || {}) }),
+        finding.checkedAt
       ]);
   }
 
@@ -155,6 +155,27 @@ class PostgresAgentStore {
     return rowCount;
   }
 
+  async listDueSchedules({ now }) {
+    const { rows } = await this.pool.query(`
+      SELECT * FROM richo_agent_schedules
+      WHERE enabled=TRUE AND next_run_at IS NOT NULL AND next_run_at <= $1
+      ORDER BY next_run_at ASC
+      FOR UPDATE SKIP LOCKED`, [now]);
+    return rows.map(mapSchedule);
+  }
+
+  async advanceSchedule({ schedule, now }) {
+    if (!schedule.intervalSeconds) {
+      await this.pool.query(`UPDATE richo_agent_schedules SET enabled=FALSE,last_run_at=$2,updated_at=$2 WHERE id=$1`, [schedule.id, now]);
+      return;
+    }
+    const nextRunAt = new Date(now.getTime() + schedule.intervalSeconds * 1000);
+    await this.pool.query(`
+      UPDATE richo_agent_schedules
+      SET last_run_at=$2,next_run_at=$3,updated_at=$2
+      WHERE id=$1`, [schedule.id, now, nextRunAt]);
+  }
+
   async getRuntimeSummary() {
     const [jobs, agents] = await Promise.all([
       this.pool.query(`SELECT status, COUNT(*)::int AS count FROM richo_agent_jobs GROUP BY status`),
@@ -175,7 +196,7 @@ function normalizeError(error) {
 function mapJob(r) {
   if (!r) return null;
   return {
-    id: r.id, sectionId: r.section_id, agentId: r.agent_id, trigger: r.trigger_name,
+    id: r.id, sectionId: r.section_id, agentId: r.agent_id, trigger: r.trigger,
     operation: r.operation, payload: r.payload || {}, context: r.context || {}, priority: r.priority,
     maxAttempts: r.max_attempts, attempts: r.attempts, idempotencyKey: r.idempotency_key,
     correlationId: r.correlation_id, causationId: r.causation_id, availableAt: r.available_at,
@@ -191,6 +212,15 @@ function mapAgent(r) {
     currentJobId: r.current_job_id, lastHeartbeatAt: r.last_heartbeat_at,
     lastCompletedAt: r.last_completed_at, lastError: r.last_error,
     consecutiveFailures: r.consecutive_failures
+  };
+}
+
+function mapSchedule(r) {
+  return {
+    id: r.id, sectionId: r.section_id, agentId: r.agent_id,
+    trigger: r.trigger, operation: r.operation, priority: r.priority,
+    maxAttempts: r.max_attempts, intervalSeconds: r.interval_seconds,
+    nextRunAt: r.next_run_at, payload: r.payload || {}, context: r.context || {}
   };
 }
 
