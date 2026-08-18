@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String   @id
+  shop          String
+  state         String
+  isOnline      Boolean  @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean  @default(false)
+  locale        String?
+  collaborator  Boolean? @default(false)
+  emailVerified Boolean?  @default(false)
+
+  @@index([shop])
+}
+
+model RichoShopifyAction {
+  id                    String   @id
+  shopDomain            String   @map("shop_domain")
+  agent                 String
+  title                 String
+  evidence              String
+  recommendation        String
+  risk                  String
+  reversible            Boolean  @default(false)
+  requiresHumanApproval Boolean  @default(true) @map("requires_human_approval")
+  status                String   @default("proposed")
+  expectedStateHash     String?  @map("expected_state_hash")
+  rollbackPayload       Json?    @map("rollback_payload")
+  mutationPayload       Json?    @map("mutation_payload")
+  approvedBy            String?  @map("approved_by")
+  approvedAt            DateTime? @map("approved_at")
+  executedAt            DateTime? @map("executed_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+  auditEvents           RichoShopifyAuditEvent[]
+
+  @@index([shopDomain, status, createdAt])
+  @@map("richo_shopify_actions")
+}
+
+model RichoShopifyAuditEvent {
+  id        BigInt   @id @default(autoincrement())
+  actionId  String   @map("action_id")
+  event     String
+  actorType String   @map("actor_type")
+  actorId   String?  @map("actor_id")
+  evidence  String?
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  action    RichoShopifyAction @relation(fields: [actionId], references: [id], onDelete: Restrict)
+
+  @@index([actionId, createdAt])
+  @@map("richo_shopify_audit_events")
+}
