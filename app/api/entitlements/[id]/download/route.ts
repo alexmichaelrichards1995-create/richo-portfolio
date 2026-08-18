@@ -22,6 +22,13 @@ function errorResponse(message: string, status: number) {
   )
 }
 
+function accessWindowIsActive(startsAt: string | null, expiresAt: string | null) {
+  const now = Date.now()
+  if (startsAt && Date.parse(startsAt) > now) return false
+  if (expiresAt && Date.parse(expiresAt) <= now) return false
+  return true
+}
+
 export async function GET(
   _request: Request,
   context: { params: Promise<{ id: string }> },
@@ -39,7 +46,7 @@ export async function GET(
 
   const { data: entitlement, error: entitlementError } = await supabase
     .from('entitlements')
-    .select('id, user_id, order_item_id, entitlement_type, status')
+    .select('id, user_id, order_item_id, entitlement_type, status, starts_at, expires_at')
     .eq('id', id)
     .eq('user_id', claims.sub)
     .maybeSingle()
@@ -48,6 +55,9 @@ export async function GET(
   if (!entitlement) return errorResponse('Entitlement not found', 404)
   if (entitlement.status !== 'active' || entitlement.entitlement_type !== 'download') {
     return errorResponse('Download access is not active', 403)
+  }
+  if (!accessWindowIsActive(entitlement.starts_at, entitlement.expires_at)) {
+    return errorResponse('Download access is outside its validity window', 403)
   }
   if (!entitlement.order_item_id) {
     return errorResponse('Download delivery is not configured', 409)
