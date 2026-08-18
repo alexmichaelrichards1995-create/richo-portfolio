@@ -79,6 +79,17 @@ test('Subscription lifecycle persists Stripe item billing periods', async () => 
   assert.match(webhook, /subscription\.ended_at/)
 })
 
+test('Stripe server defaults to test mode and live money requires a second explicit gate', async () => {
+  const stripeServer = await source('lib/stripe/server.ts')
+
+  assert.match(stripeServer, /process\.env\.STRIPE_MODE \|\| 'test'/)
+  assert.match(stripeServer, /\(\?:rk\|sk\)_test_/)
+  assert.match(stripeServer, /\(\?:rk\|sk\)_live_/)
+  assert.match(stripeServer, /detected !== configured/)
+  assert.match(stripeServer, /RICHO_LIVE_PAYMENTS_ENABLED !== 'true'/)
+  assert.match(stripeServer, /Live Stripe operations are disabled/)
+})
+
 test('Server credentials cannot migrate into browser code', async () => {
   const admin = await source('lib/supabase/admin.ts')
   const stripeServer = await source('lib/stripe/server.ts')
