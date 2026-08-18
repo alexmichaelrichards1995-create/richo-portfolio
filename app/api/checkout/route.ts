@@ -107,6 +107,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  const storageBucket = metadataString(product.metadata, 'storage_bucket')
+  const storagePath = metadataString(product.metadata, 'storage_path')
+  if (product.delivery_mode === 'download' && (!storageBucket || !storagePath)) {
+    return NextResponse.json(
+      { error: 'Download product is not configured for secure delivery' },
+      { status: 409 },
+    )
+  }
+
   const checkoutAttempt = crypto.randomUUID()
   const orderMetadata: Json = {
     source: 'richo_web_checkout',
@@ -114,6 +123,15 @@ export async function POST(request: NextRequest) {
     product_type: product.product_type,
     delivery_mode: product.delivery_mode,
     checkout_attempt: checkoutAttempt,
+  }
+  const orderItemMetadata: Json = {
+    delivery_mode: product.delivery_mode,
+    ...(storageBucket && storagePath
+      ? {
+          storage_bucket: storageBucket,
+          storage_path: storagePath,
+        }
+      : {}),
   }
 
   const { data: order, error: orderError } = await admin
@@ -144,7 +162,7 @@ export async function POST(request: NextRequest) {
     name_snapshot: product.name,
     unit_amount: product.price_amount,
     quantity: 1,
-    metadata: { delivery_mode: product.delivery_mode },
+    metadata: orderItemMetadata,
   })
 
   if (itemError) {
