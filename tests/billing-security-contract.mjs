@@ -116,7 +116,7 @@ test('Stripe mock transport is isolated to test mode and non-production hosts', 
   assert.match(workflow, /STRIPE_TEST_MOCK_ENABLED: 'true'/)
 })
 
-test('Secure download requires owned active download entitlement and short-lived signed URL', async () => {
+test('Secure download requires owned active in-window entitlement and short-lived signed URL', async () => {
   const download = await source('app/api/entitlements/[id]/download/route.ts')
 
   assert.match(download, /auth\.getClaims\(\)/)
@@ -124,6 +124,9 @@ test('Secure download requires owned active download entitlement and short-lived
   assert.match(download, /\.eq\('user_id', claims\.sub\)/)
   assert.match(download, /entitlement\.status !== 'active'/)
   assert.match(download, /entitlement\.entitlement_type !== 'download'/)
+  assert.match(download, /accessWindowIsActive\(entitlement\.starts_at, entitlement\.expires_at\)/)
+  assert.match(download, /Date\.parse\(startsAt\) > now/)
+  assert.match(download, /Date\.parse\(expiresAt\) <= now/)
   assert.match(download, /storage_bucket/)
   assert.match(download, /storage_path/)
   assert.match(download, /createSignedUrl\(path, 120, \{ download: true \}\)/)
