@@ -34,7 +34,16 @@ function StatusPill({ value }: { value: string }) {
   )
 }
 
-export default async function ProtectedPage() {
+type ProtectedPageProps = {
+  searchParams: Promise<{
+    checkout?: string | string[]
+  }>
+}
+
+export default async function ProtectedPage({ searchParams }: ProtectedPageProps) {
+  const query = await searchParams
+  const checkoutReturned = query.checkout === 'success'
+
   const supabase = await createClient()
   const { data: authData, error: authError } = await supabase.auth.getClaims()
 
@@ -88,6 +97,12 @@ export default async function ProtectedPage() {
           </div>
           <LogoutButton />
         </header>
+
+        {checkoutReturned ? (
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm leading-6">
+            Checkout returned successfully. Payment and access are confirmed only after the signed Stripe webhook is reconciled. The order and entitlement states below are the authoritative result; refresh if reconciliation is still processing.
+          </div>
+        ) : null}
 
         {hasDataError ? (
           <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
@@ -176,7 +191,7 @@ export default async function ProtectedPage() {
           <Card>
             <CardHeader>
               <CardTitle>Entitlements</CardTitle>
-              <CardDescription>Access granted by completed commercial workflows.</CardDescription>
+              <CardDescription>Access granted only by completed, reconciled commercial workflows.</CardDescription>
             </CardHeader>
             <CardContent>
               {entitlements.length === 0 ? (
@@ -184,14 +199,24 @@ export default async function ProtectedPage() {
               ) : (
                 <div className="divide-y">
                   {entitlements.map((entitlement) => (
-                    <div key={entitlement.id} className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0">
+                    <div key={entitlement.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="font-medium capitalize">{entitlement.entitlement_type.replaceAll('_', ' ')}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
                           Starts {formatDate(entitlement.starts_at)} · Expires {formatDate(entitlement.expires_at)}
                         </p>
                       </div>
-                      <StatusPill value={entitlement.status} />
+                      <div className="flex items-center gap-3">
+                        {entitlement.entitlement_type === 'download' && entitlement.status === 'active' ? (
+                          <a
+                            href={`/api/entitlements/${encodeURIComponent(entitlement.id)}/download`}
+                            className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+                          >
+                            Secure download
+                          </a>
+                        ) : null}
+                        <StatusPill value={entitlement.status} />
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -229,7 +254,7 @@ export default async function ProtectedPage() {
         </section>
 
         <p className="text-xs leading-5 text-muted-foreground">
-          This migration branch is not production deployment authorisation. Orders, entitlements and subscription mutations remain server/service-role controlled.
+          This migration branch is not production deployment authorisation. Payment redirects never grant access; orders, entitlements, subscriptions and signed downloads remain server controlled.
         </p>
       </div>
     </main>
