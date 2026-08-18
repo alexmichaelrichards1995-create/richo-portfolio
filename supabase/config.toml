@@ -10,3 +10,11 @@ additional_redirect_urls = [
 
 [db]
 shadow_port = 54320
+
+[storage]
+enabled = true
+file_size_limit = "500MiB"
+
+[storage.buckets.richo-digital-deliveries]
+public = false
+file_size_limit = "500MiB"
