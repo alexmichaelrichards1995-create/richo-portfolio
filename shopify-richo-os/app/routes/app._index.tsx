@@ -1,16 +1,34 @@
-import { useLoaderData } from "react-router";
-import type { LoaderFunctionArgs } from "react-router";
+import { Form, useLoaderData } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { evaluateCommerce } from "../lib/richo-engine.server";
-import { initialAuditLedger, proposeActions } from "../lib/richo-control-plane.server";
+import { proposeActions } from "../lib/richo-control-plane.server";
+import { decideAction, listActions, persistProposals } from "../lib/approval-repository.server";
 
 function numberCell(row: unknown[], index: number) {
   const value = Number(row[index] ?? 0);
   return Number.isFinite(value) ? value : 0;
 }
 
+export async function action({ request }: ActionFunctionArgs) {
+  const { session } = await authenticate.admin(request);
+  const form = await request.formData();
+  const actionId = String(form.get("actionId") ?? "");
+  const decision = String(form.get("decision") ?? "");
+  if (!actionId || (decision !== "approved" && decision !== "rejected")) {
+    throw new Response("Invalid approval request", { status: 400 });
+  }
+  await decideAction({
+    shopDomain: session.shop,
+    actionId,
+    decision,
+    actorId: session.id,
+  });
+  return { ok: true };
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const response = await admin.graphql(`#graphql
     query RichoOperationsSnapshot {
       products(first: 100) { nodes { status } }
@@ -47,15 +65,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
     revenue: salesTotals.revenue,
   };
   const decision = evaluateCommerce(snapshot);
-  const approvalQueue = proposeActions(decision.findings);
+  await persistProposals(session.shop, proposeActions(decision.findings));
+  const approvalQueue = await listActions(session.shop);
   return {
-    snapshot, decision, approvalQueue, auditLedger: initialAuditLedger(approvalQueue),
+    snapshot, decision, approvalQueue,
     analyticsErrors: [...(data.shopifyqlQuery?.parseErrors ?? []), ...(data.sales?.parseErrors ?? [])],
   };
 }
 
 export default function RichoOperationsHome() {
-  const { snapshot, decision, approvalQueue, auditLedger, analyticsErrors } = useLoaderData<typeof loader>();
+  const { snapshot, decision, approvalQueue, analyticsErrors } = useLoaderData<typeof loader>();
+  const auditCount = approvalQueue.reduce((sum, action) => sum + action.auditEvents.length, 0);
   return <main style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "system-ui" }}>
     <header><p style={{opacity:.65}}>R.I.C.H.O. Systems · Shopify Operations OS</p><h1>Mission Control</h1><p>Observe → reason → propose → approve → execute → verify. Sensitive actions never bypass human approval.</p></header>
     {analyticsErrors.length > 0 && <section style={{border:"1px solid #d8a600",padding:14,borderRadius:10}}><strong>Analytics warning</strong><p>{analyticsErrors.join(" · ")}</p></section>}
@@ -63,8 +83,8 @@ export default function RichoOperationsHome() {
       <Metric label="Operating score" value={`${decision.operatingScore}/100`}/><Metric label="30d sessions" value={snapshot.sessions}/><Metric label="Add-to-cart" value={`${decision.addToCartRate.toFixed(2)}%`}/><Metric label="Checkout" value={`${decision.checkoutRate.toFixed(2)}%`}/><Metric label="Conversion" value={`${decision.conversionRate.toFixed(2)}%`}/><Metric label="Revenue" value={`A$${snapshot.revenue.toFixed(2)}`}/>
     </section>
     <section style={{marginTop:28}}><h2>AI Operations Agents</h2><p>Conversion · Catalog · Revenue · Customer · Governance</p></section>
-    <section style={{marginTop:28}}><h2>Approval Queue</h2><div style={{display:"grid",gap:10}}>{approvalQueue.map(a=><article key={a.id} style={{border:"1px solid #ddd",borderRadius:10,padding:16}}><strong>{a.title}</strong><p>{a.evidence}</p><p>{a.recommendation}</p><small>Agent: {a.agent} · Risk: {a.risk} · Status: {a.status} · Human approval required</small></article>)}</div></section>
-    <section style={{marginTop:28}}><h2>Audit Ledger</h2><p>{auditLedger.length} evidence-backed proposal event(s) recorded in the current operating snapshot. Persistent storage is the next adapter boundary.</p></section>
+    <section style={{marginTop:28}}><h2>Approval Queue</h2><div style={{display:"grid",gap:10}}>{approvalQueue.map(a=><article key={a.id} style={{border:"1px solid #ddd",borderRadius:10,padding:16}}><strong>{a.title}</strong><p>{a.evidence}</p><p>{a.recommendation}</p><small>Agent: {a.agent} · Risk: {a.risk} · Status: {a.status}</small>{a.status === "proposed" && <Form method="post" style={{display:"flex",gap:8,marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button type="submit" name="decision" value="approved">Approve</button><button type="submit" name="decision" value="rejected">Reject</button></Form>}</article>)}</div></section>
+    <section style={{marginTop:28}}><h2>Audit Ledger</h2><p>{auditCount} persisted audit event(s) across the current operating queue.</p></section>
     <section style={{marginTop:28}}><h2>Conversion Lab</h2><p>Current funnel: {snapshot.sessions} sessions → {snapshot.addToCarts} carts → {snapshot.checkouts} checkouts → {snapshot.purchases} purchases.</p></section>
   </main>;
 }
