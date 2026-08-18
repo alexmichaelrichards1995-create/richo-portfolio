@@ -38,6 +38,23 @@ test('Checkout preserves hosted dynamic-payment security posture', async () => {
   assert.doesNotMatch(checkout, /automatic_tax/)
 })
 
+test('Customer Portal is authenticated, same-origin and server-customer-bound', async () => {
+  const portal = await source('app/api/billing/portal/route.ts')
+  const launcher = await source('components/billing/manage-billing-button.tsx')
+
+  assert.match(portal, /auth\.getClaims\(\)/)
+  assert.match(portal, /sameOriginAllowed/)
+  assert.match(portal, /customer_subscriptions/)
+  assert.match(portal, /\.eq\('user_id', claims\.sub\)/)
+  assert.match(portal, /\.eq\('payment_provider', 'stripe'\)/)
+  assert.match(portal, /provider_customer_id/)
+  assert.match(portal, /billingPortal\.sessions\.create/)
+  assert.match(portal, /return_url/)
+  assert.doesNotMatch(launcher, /provider_customer_id/)
+  assert.doesNotMatch(launcher, /STRIPE_(?:RESTRICTED|WEBHOOK|SECRET)/)
+  assert.doesNotMatch(launcher, /SUPABASE_(?:SECRET|SERVICE_ROLE)/)
+})
+
 test('Webhook keeps raw-body verification, durable ledger and retry semantics', async () => {
   const webhook = await source('app/api/webhooks/stripe/route.ts')
 
@@ -51,10 +68,22 @@ test('Webhook keeps raw-body verification, durable ledger and retry semantics', 
   assert.doesNotMatch(webhook, /process\.env\.NEXT_PUBLIC_.*(?:SECRET|SERVICE|STRIPE)/)
 })
 
+test('Subscription lifecycle persists Stripe item billing periods', async () => {
+  const period = await source('lib/commerce/subscription-period.ts')
+  const webhook = await source('app/api/webhooks/stripe/route.ts')
+
+  assert.match(period, /item\.current_period_start/)
+  assert.match(period, /item\.current_period_end/)
+  assert.match(webhook, /current_period_start: unixSecondsToIso\(currentPeriodStart\)/)
+  assert.match(webhook, /current_period_end: unixSecondsToIso\(currentPeriodEnd\)/)
+  assert.match(webhook, /subscription\.ended_at/)
+})
+
 test('Server credentials cannot migrate into browser code', async () => {
   const admin = await source('lib/supabase/admin.ts')
   const stripeServer = await source('lib/stripe/server.ts')
   const checkoutButton = await source('components/commerce/checkout-button.tsx')
+  const billingButton = await source('components/billing/manage-billing-button.tsx')
 
   assert.match(admin, /SUPABASE_SECRET_KEY/)
   assert.doesNotMatch(admin, /NEXT_PUBLIC_SUPABASE_SECRET/)
@@ -62,4 +91,6 @@ test('Server credentials cannot migrate into browser code', async () => {
   assert.match(stripeServer, /STRIPE_WEBHOOK_SECRET/)
   assert.doesNotMatch(checkoutButton, /STRIPE_(?:RESTRICTED|WEBHOOK|SECRET)/)
   assert.doesNotMatch(checkoutButton, /SUPABASE_(?:SECRET|SERVICE_ROLE)/)
+  assert.doesNotMatch(billingButton, /STRIPE_(?:RESTRICTED|WEBHOOK|SECRET)/)
+  assert.doesNotMatch(billingButton, /SUPABASE_(?:SECRET|SERVICE_ROLE)/)
 })
