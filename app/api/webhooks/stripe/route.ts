@@ -4,7 +4,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import {
   entitlementTypeForDeliveryMode,
   normalizeStripeSubscriptionStatus,
+  unixSecondsToIso,
 } from '@/lib/commerce/fulfilment'
+import { subscriptionPeriod } from '@/lib/commerce/subscription-period'
 import type { Json } from '@/lib/database.types'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { getStripe, getStripeWebhookSecret } from '@/lib/stripe/server'
@@ -249,6 +251,13 @@ async function processSubscription(
 
   const normalizedStatus = normalizeStripeSubscriptionStatus(subscription.status)
   const providerCustomerId = expandableId(subscription.customer)
+  const { currentPeriodStart, currentPeriodEnd } = subscriptionPeriod(subscription)
+  const endedAt =
+    typeof subscription.ended_at === 'number'
+      ? unixSecondsToIso(subscription.ended_at)
+      : normalizedStatus === 'cancelled' || normalizedStatus === 'expired'
+        ? new Date().toISOString()
+        : null
 
   const { error } = await admin.from('customer_subscriptions').upsert(
     {
@@ -258,11 +267,10 @@ async function processSubscription(
       provider_customer_id: providerCustomerId,
       provider_subscription_id: subscription.id,
       status: normalizedStatus,
+      current_period_start: unixSecondsToIso(currentPeriodStart),
+      current_period_end: unixSecondsToIso(currentPeriodEnd),
       cancel_at_period_end: subscription.cancel_at_period_end,
-      ended_at:
-        normalizedStatus === 'cancelled' || normalizedStatus === 'expired'
-          ? new Date().toISOString()
-          : null,
+      ended_at: endedAt,
       metadata: {
         source: 'stripe_webhook',
         stripe_status: subscription.status,
