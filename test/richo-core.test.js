@@ -1,0 +1,10 @@
+'use strict';const assert=require('assert');const R=require('../src/richo-core');
+assert.strictEqual(R.VERSION,'0.1.0');assert.strictEqual(R.bounded(150),100);assert.strictEqual(R.bounded(-2),0);
+const ev=R.evidence([{verified:true},{verified:false},{verified:true}]);assert.strictEqual(ev.coverage,67);assert(Object.isFrozen(ev));
+assert.strictEqual(R.gate({score:90,exceptions:0,evidenceCoverage:95}).state,'READY');
+assert.strictEqual(R.gate({score:80,exceptions:3,evidenceCoverage:95}).state,'REVIEW');
+assert.strictEqual(R.gate({score:30,exceptions:0,evidenceCoverage:95}).state,'BLOCKED');
+assert.strictEqual(R.gate({score:100,exceptions:0,evidenceCoverage:100}).humanApprovalRequired,true);
+assert.strictEqual(R.gate({score:100,exceptions:0,evidenceCoverage:100}).autonomousExecution,false);
+const sim=R.simulate('unit',{x:2},i=>({y:i.x*2}));assert.strictEqual(sim.output.y,4);assert.strictEqual(sim.mode,'SIMULATION');assert.strictEqual(sim.receipt.mode,'SIMULATION');
+console.log('R.I.C.H.O. Core SDK verification: PASS');
