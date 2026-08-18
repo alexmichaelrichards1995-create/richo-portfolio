@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 
 import { LogoutButton } from '@/components/auth/logout-button'
+import { ManageBillingButton } from '@/components/billing/manage-billing-button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/server'
 
@@ -71,6 +72,7 @@ export default async function ProtectedPage() {
   const orders = ordersResult.data ?? []
   const entitlements = entitlementsResult.data ?? []
   const subscriptions = subscriptionsResult.data ?? []
+  const hasStripeSubscription = subscriptions.some((item) => item.payment_provider === 'stripe')
   const hasDataError = Boolean(
     profileResult.error || ordersResult.error || entitlementsResult.error || subscriptionsResult.error,
   )
@@ -202,7 +204,8 @@ export default async function ProtectedPage() {
               <CardTitle>Subscriptions</CardTitle>
               <CardDescription>Customer-visible lifecycle state only; provider credentials remain private.</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-5">
+              {hasStripeSubscription ? <ManageBillingButton /> : null}
               {subscriptions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No subscriptions yet.</p>
               ) : (
