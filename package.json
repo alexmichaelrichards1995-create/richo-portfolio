@@ -10,7 +10,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:billing": "node --test tests/billing-security-contract.mjs",
+    "test:billing": "node --test tests/billing-security-contract.mjs tests/storage-security-contract.mjs",
     "test:stripe-mock": "node --test tests/stripe-mock-integration.mjs",
     "db:start": "supabase start",
     "db:reset": "supabase db reset",
