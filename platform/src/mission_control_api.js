@@ -1,12 +1,13 @@
 const express = require('express');
 const { listSections } = require('./section_registry');
 
-function createMissionControlRouter({ store, runtime, scheduler } = {}) {
+function createMissionControlRouter({ store, runtime, scheduler, service } = {}) {
   if (!store) throw new Error('Mission Control API requires store');
   const router = express.Router();
 
   router.get('/status', async (_req, res, next) => {
     try {
+      if (service?.dashboard) return res.json(await service.dashboard());
       const [summary, agents, queued, approvals] = await Promise.all([
         store.getRuntimeSummary?.() || {},
         store.listAgents?.() || [],
@@ -19,7 +20,7 @@ function createMissionControlRouter({ store, runtime, scheduler } = {}) {
         sections: listSections(),
         agents,
         queue: { queued: queued.length, awaitingApproval: approvals.length },
-        controls: { runtimeAttached: Boolean(runtime), schedulerAttached: Boolean(scheduler) }
+        controls: { runtimeAttached: Boolean(runtime), schedulerAttached: Boolean(scheduler), serviceAttached: Boolean(service) }
       });
     } catch (error) { next(error); }
   });
@@ -33,6 +34,32 @@ function createMissionControlRouter({ store, runtime, scheduler } = {}) {
     try {
       const limit = Math.min(Number(req.query.limit) || 100, 500);
       res.json({ jobs: await store.listJobs({ status: req.query.status || undefined, limit }) });
+    } catch (error) { next(error); }
+  });
+
+  router.get('/sections/:sectionId', async (req, res, next) => {
+    try {
+      if (!service?.sectionDetail) return res.status(503).json({ error: 'mission_control_service_not_attached' });
+      const detail = await service.sectionDetail(req.params.sectionId);
+      if (!detail) return res.status(404).json({ error: 'unknown_section' });
+      res.json(detail);
+    } catch (error) { next(error); }
+  });
+
+  router.post('/sections/:sectionId/state', async (req, res, next) => {
+    try {
+      if (!service?.setSectionState) return res.status(503).json({ error: 'mission_control_service_not_attached' });
+      const actor = {
+        type: req.get('x-richo-actor-type') || 'human',
+        id: req.get('x-richo-actor-id') || 'owner'
+      };
+      const result = await service.setSectionState({
+        sectionId: req.params.sectionId,
+        desiredState: req.body?.desiredState,
+        reason: req.body?.reason,
+        actor
+      });
+      res.json(result);
     } catch (error) { next(error); }
   });
 
