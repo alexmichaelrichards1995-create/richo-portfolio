@@ -140,10 +140,14 @@ Readiness fails closed if the required GitHub App/OAuth/session/admin configurat
 
 The repository contains an inert rehearsal package under `rehearsal/`:
 
+- `ZERO_PROVISION_REHEARSAL.md` — authoritative execution order and hard stops.
 - `github-app-settings.staging.json.example` — least-privilege staging callback/webhook/event template.
 - `staging.env.example` — secret-name-only staging environment template with live-money/Connect/payout gates disabled.
-- `MIGRATION_BACKUP_REHEARSAL.md` — backup, migration, restore and rollback evidence procedure.
-- `collect-staging-evidence.mjs` — redacted runtime/migration evidence collector for an already-approved staging service.
+- `MIGRATION_BACKUP_REHEARSAL.md` — backup, migration and fresh-target restore procedure.
+- `ROLLBACK_DRILL.md` — immutable-image + restored-database rollback drill.
+- `collect-staging-evidence.mjs` — redacted runtime/readiness + migration inventory collector.
+- `collect-webhook-job-evidence.mjs` — read-only webhook delivery, durable job and audit receipt collector.
+- `collect-oauth-session-evidence.mjs` — read-only pre-login OAuth redirect/state/callback collector.
 - `RCP_STAGING_RECEIPTS.md` — blank `RCP-STG-001` through `RCP-STG-010` evidence pack.
 - `validate-rehearsal-package.mjs` — fail-closed policy validator executed by `npm run check`.
 
