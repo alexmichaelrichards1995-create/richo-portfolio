@@ -1,0 +1,79 @@
+name: RICHO Shopify OS
+
+on:
+  pull_request:
+    paths:
+      - "shopify-richo-os/**"
+      - ".github/workflows/richo-shopify-os.yml"
+  push:
+    branches:
+      - "feat/richo-shopify-operations-os"
+    paths:
+      - "shopify-richo-os/**"
+      - ".github/workflows/richo-shopify-os.yml"
+
+jobs:
+  standalone-build-and-governance:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: richo_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ci -d richo_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      SHOPIFY_API_KEY: ci-test-key
+      SHOPIFY_API_SECRET: ci-test-secret
+      SHOPIFY_APP_URL: https://ci.example.com
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/richo_ci
+      SCOPES: read_products,write_products,read_orders,read_customers,read_reports
+      RICHO_PRODUCTION_APPROVED: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.12.0
+      - name: Install standalone dependencies
+        working-directory: shopify-richo-os
+        run: npm install --no-audit --no-fund
+      - name: Audit dependencies for critical vulnerabilities
+        working-directory: shopify-richo-os
+        run: npm audit --audit-level=critical
+      - name: Validate Prisma schema
+        working-directory: shopify-richo-os
+        run: npx prisma validate
+      - name: Deploy Prisma migrations to ephemeral PostgreSQL
+        working-directory: shopify-richo-os
+        run: npx prisma migrate deploy
+      - name: Generate Prisma client
+        working-directory: shopify-richo-os
+        run: npx prisma generate
+      - name: Run executable unit tests
+        working-directory: shopify-richo-os
+        run: npm run test:unit
+      - name: Typecheck standalone app
+        working-directory: shopify-richo-os
+        run: npm run typecheck
+      - name: Build standalone app
+        working-directory: shopify-richo-os
+        run: npm run build
+      - name: Validate RICHO governance invariants
+        working-directory: shopify-richo-os
+        run: npm run validate:control-plane
+      - name: Run RICHO experiment lifecycle tests
+        working-directory: shopify-richo-os
+        run: npm run test:lifecycle
+      - name: Validate production readiness controls
+        working-directory: shopify-richo-os
+        run: npm run validate:production
+      - name: Validate operational security controls
+        working-directory: shopify-richo-os
+        run: npm run validate:security

@@ -1,0 +1,158 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id            String   @id
+  shop          String
+  state         String
+  isOnline      Boolean  @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean  @default(false)
+  locale        String?
+  collaborator  Boolean? @default(false)
+  emailVerified Boolean? @default(false)
+
+  @@index([shop])
+}
+
+model RichoShopControl {
+  shopDomain          String   @id @map("shop_domain")
+  deploymentState     String   @default("BLOCKED") @map("deployment_state")
+  deploymentApproved  Boolean  @default(false) @map("deployment_approved")
+  sessionsRevokedAt   DateTime? @map("sessions_revoked_at")
+  lastScopeSyncAt     DateTime? @map("last_scope_sync_at")
+  lastWebhookAt       DateTime? @map("last_webhook_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@map("richo_shop_controls")
+}
+
+model RichoShopOperator {
+  id             String   @id @default(cuid())
+  shopDomain     String   @map("shop_domain")
+  sessionId      String   @map("session_id")
+  canApprove     Boolean  @default(false) @map("can_approve")
+  canExecute     Boolean  @default(false) @map("can_execute")
+  canRollback    Boolean  @default(false) @map("can_rollback")
+  canAdminister  Boolean  @default(false) @map("can_administer")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([shopDomain, sessionId])
+  @@index([shopDomain, active])
+  @@map("richo_shop_operators")
+}
+
+model RichoMutationWindow {
+  id          String   @id @default(cuid())
+  shopDomain  String   @map("shop_domain")
+  actorId     String   @map("actor_id")
+  windowStart DateTime @map("window_start")
+  count       Int      @default(0)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([shopDomain, actorId, windowStart])
+  @@index([shopDomain, windowStart])
+  @@map("richo_mutation_windows")
+}
+
+model RichoWebhookReceipt {
+  id            String   @id
+  shopDomain    String   @map("shop_domain")
+  topic         String
+  webhookId     String   @map("webhook_id")
+  correlationId String   @map("correlation_id")
+  processedAt   DateTime @default(now()) @map("processed_at")
+
+  @@unique([shopDomain, webhookId])
+  @@index([shopDomain, processedAt])
+  @@map("richo_webhook_receipts")
+}
+
+model RichoSecurityEvent {
+  id            BigInt   @id @default(autoincrement())
+  shopDomain    String   @map("shop_domain")
+  event         String
+  actorId       String?  @map("actor_id")
+  targetId      String?  @map("target_id")
+  correlationId String?  @map("correlation_id")
+  severity      String   @default("info")
+  payload       Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([shopDomain, createdAt])
+  @@index([shopDomain, event, createdAt])
+  @@map("richo_security_events")
+}
+
+model RichoShopifyAction {
+  id                    String   @id
+  shopDomain            String   @map("shop_domain")
+  agent                 String
+  title                 String
+  evidence              String
+  recommendation        String
+  risk                  String
+  reversible            Boolean  @default(false)
+  requiresHumanApproval Boolean  @default(true) @map("requires_human_approval")
+  status                String   @default("proposed")
+  expectedStateHash     String?  @map("expected_state_hash")
+  rollbackPayload       Json?    @map("rollback_payload")
+  mutationPayload       Json?    @map("mutation_payload")
+  approvedBy            String?  @map("approved_by")
+  approvedAt            DateTime? @map("approved_at")
+  executedAt            DateTime? @map("executed_at")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
+  auditEvents           RichoShopifyAuditEvent[]
+  experiment            RichoShopifyExperiment?
+
+  @@index([shopDomain, status, createdAt])
+  @@map("richo_shopify_actions")
+}
+
+model RichoShopifyAuditEvent {
+  id        BigInt   @id @default(autoincrement())
+  actionId  String   @map("action_id")
+  event     String
+  actorType String   @map("actor_type")
+  actorId   String?  @map("actor_id")
+  evidence  String?
+  payload   Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  action    RichoShopifyAction @relation(fields: [actionId], references: [id], onDelete: Restrict)
+
+  @@index([actionId, createdAt])
+  @@map("richo_shopify_audit_events")
+}
+
+model RichoShopifyExperiment {
+  id              String   @id
+  actionId        String   @unique @map("action_id")
+  shopDomain      String   @map("shop_domain")
+  targetProductId String?  @map("target_product_id")
+  baseline        Json
+  outcome         Json?
+  startedAt       DateTime @default(now()) @map("started_at")
+  measuredAt      DateTime? @map("measured_at")
+  status          String   @default("running")
+  action          RichoShopifyAction @relation(fields: [actionId], references: [id], onDelete: Restrict)
+
+  @@index([shopDomain, status, startedAt])
+  @@index([shopDomain, targetProductId, status])
+  @@map("richo_shopify_experiments")
+}
