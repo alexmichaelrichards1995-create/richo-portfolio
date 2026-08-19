@@ -12,8 +12,8 @@ include_config_on_deploy = true
 
 [access_scopes]
 # read_reports is required for shopifyqlQuery analytics.
-# read_customers / read_orders / read_products support the Mission Control evidence model.
-scopes = "read_products,read_orders,read_customers,read_reports"
+# write_products is used only by the human-approved, allow-listed product metadata executor.
+scopes = "read_products,write_products,read_orders,read_customers,read_reports"
 
 [webhooks]
 api_version = "2026-07"
