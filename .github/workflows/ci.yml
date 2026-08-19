@@ -32,14 +32,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 18.x
-          cache: npm
 
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
-      - name: Install dependencies reproducibly
-        run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+      - name: Install dependencies
+        run: npm install
 
       - name: Wait for PostgreSQL
         env:
