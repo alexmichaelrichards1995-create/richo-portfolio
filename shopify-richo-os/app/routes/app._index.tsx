@@ -14,12 +14,14 @@ import { fetchProductExperimentMetrics } from "../lib/product-experiment-metrics
 import { requireOperatorCapability } from "../lib/operator-policy.server";
 import { deploymentState } from "../lib/deployment-gate.server";
 import { emitTelemetry } from "../lib/telemetry.server";
+import { assertTrustedAdminPost } from "../lib/admin-request-guard.server";
 
 function numberCell(row: unknown[], index: number) { const value = Number(row[index] ?? 0); return Number.isFinite(value) ? value : 0; }
 function isoDate(date: Date) { return date.toISOString().slice(0, 10); }
 function addDays(date: Date, days: number) { const d = new Date(date); d.setUTCDate(d.getUTCDate() + days); return d; }
 
 export async function action({ request }: ActionFunctionArgs) {
+  assertTrustedAdminPost(request);
   const { admin, session } = await authenticate.admin(request);
   const form = await request.formData();
   const actionId = String(form.get("actionId") ?? "");
@@ -51,7 +53,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const now = new Date();
       const baseline = await fetchProductExperimentMetrics({ adminGraphql: admin.graphql, productTitle: currentState.title, productHandle: currentState.handle, from: addDays(now, -7), to: addDays(now, -1) });
       await startExperiment({ shopDomain: session.shop, actionId, baseline, targetProductId: payload.productId });
-      await executeApprovedProductUpdate({ shopDomain: session.shop, actionId, expectedStateMatches: hashProductState(currentState) === row.expectedStateHash, idempotencyKey: `richo:${actionId}:${row.expectedStateHash}`, adminGraphql: admin.graphql });
+      await executeApprovedProductUpdate({ shopDomain: session.shop, actionId, actorId: session.id, expectedStateMatches: hashProductState(currentState) === row.expectedStateHash, idempotencyKey: `richo:${actionId}:${row.expectedStateHash}`, adminGraphql: admin.graphql });
       emitTelemetry("info", "operator.action_executed", { shop: session.shop, actionId, actorId: session.id });
       return { ok: true, intent };
     }
