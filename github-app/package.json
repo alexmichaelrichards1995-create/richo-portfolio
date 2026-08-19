@@ -12,7 +12,8 @@
     "migrate": "node scripts/migrate.js",
     "dev": "node --watch src/hardened-entrypoint.js",
     "test": "node --test",
-    "check": "node --check src/server.js && node --check src/hardened-entrypoint.js && node --test"
+    "rehearsal:validate": "node rehearsal/validate-rehearsal-package.mjs",
+    "check": "node --check src/server.js && node --check src/hardened-entrypoint.js && node rehearsal/validate-rehearsal-package.mjs && node --test"
   },
   "dependencies": {
     "pg": "8.22.0"
