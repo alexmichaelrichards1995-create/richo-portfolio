@@ -10,8 +10,18 @@ export type ExperimentMetrics = {
 };
 
 export type ExperimentImpact = "improved" | "neutral" | "regressed" | "insufficient_data";
+export type ExperimentConfidence = "low" | "medium" | "high";
+export type ExperimentRecommendation = "retain" | "observe" | "rollback" | "collect_more_data";
 
 const rate = (n: number, d: number) => d > 0 ? n / d : 0;
+
+export function confidenceFor(baseline: ExperimentMetrics, outcome: ExperimentMetrics): ExperimentConfidence {
+  const exposure = Math.min(baseline.sessions, outcome.sessions);
+  const purchases = baseline.purchases + outcome.purchases;
+  if (exposure >= 250 && purchases >= 10) return "high";
+  if (exposure >= 75 && purchases >= 3) return "medium";
+  return "low";
+}
 
 export function classifyImpact(baseline: ExperimentMetrics, outcome: ExperimentMetrics): ExperimentImpact {
   if (baseline.sessions < 20 || outcome.sessions < 20) return "insufficient_data";
@@ -25,7 +35,21 @@ export function classifyImpact(baseline: ExperimentMetrics, outcome: ExperimentM
   return "neutral";
 }
 
-export async function startExperiment(args: { shopDomain: string; actionId: string; baseline: ExperimentMetrics }) {
+export function recommendationFor(impact: ExperimentImpact, confidence: ExperimentConfidence): ExperimentRecommendation {
+  if (impact === "insufficient_data") return "collect_more_data";
+  if (impact === "regressed" && confidence !== "low") return "rollback";
+  if (impact === "improved" && confidence !== "low") return "retain";
+  return "observe";
+}
+
+export async function startExperiment(args: { shopDomain: string; actionId: string; baseline: ExperimentMetrics; targetProductId?: string | null }) {
+  if (args.targetProductId) {
+    const collision = await prisma.richoShopifyExperiment.findFirst({
+      where: { shopDomain: args.shopDomain, targetProductId: args.targetProductId, status: "running", NOT: { actionId: args.actionId } },
+    });
+    if (collision) throw new Error(`RICHO_EXPERIMENT_COLLISION:${collision.actionId}`);
+  }
+
   return prisma.richoShopifyExperiment.upsert({
     where: { actionId: args.actionId },
     update: {},
@@ -33,6 +57,7 @@ export async function startExperiment(args: { shopDomain: string; actionId: stri
       id: `experiment:${args.actionId}`,
       actionId: args.actionId,
       shopDomain: args.shopDomain,
+      targetProductId: args.targetProductId ?? null,
       baseline: args.baseline,
       status: "running",
     },
@@ -58,11 +83,15 @@ export async function listExperiments(shopDomain: string) {
   return rows.map((row) => {
     const baseline = row.baseline as ExperimentMetrics;
     const outcome = row.outcome as ExperimentMetrics | null;
+    const impact = outcome ? classifyImpact(baseline, outcome) : null;
+    const confidence = outcome ? confidenceFor(baseline, outcome) : null;
     return {
       ...row,
       baseline,
       outcome,
-      impact: outcome ? classifyImpact(baseline, outcome) : null,
+      impact,
+      confidence,
+      recommendation: impact && confidence ? recommendationFor(impact, confidence) : null,
     };
   });
 }
