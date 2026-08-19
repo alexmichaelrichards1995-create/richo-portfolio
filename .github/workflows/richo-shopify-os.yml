@@ -57,3 +57,6 @@ jobs:
       - name: Validate production readiness controls
         working-directory: shopify-richo-os
         run: npm run validate:production
+      - name: Validate operational security controls
+        working-directory: shopify-richo-os
+        run: npm run validate:security
