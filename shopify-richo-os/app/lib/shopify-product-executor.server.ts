@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { assertExecutionAllowed } from "./execution-gate.server";
 import type { ProposedAction } from "./richo-control-plane.server";
+import { fetchProductState, hashProductState } from "./product-state.server";
 
 type AdminGraphql = (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
 
@@ -80,6 +81,21 @@ export async function executeApprovedProductUpdate(args: {
     throw new Error(`RICHO_SHOPIFY_MUTATION_FAILED: ${errors.map((e: { message: string }) => e.message).join("; ")}`);
   }
 
+  const verifiedState = await fetchProductState(args.adminGraphql, payload.productId);
+  const verifiedHash = hashProductState(verifiedState);
+  const seoMatches = payload.seo?.title === undefined || verifiedState.seo?.title === payload.seo.title;
+  const titleMatches = payload.title === undefined || verifiedState.title === payload.title;
+  const descriptionMatches = payload.descriptionHtml === undefined || verifiedState.descriptionHtml === payload.descriptionHtml;
+  const verified = seoMatches && titleMatches && descriptionMatches;
+
+  if (!verified) {
+    await prisma.richoShopifyAuditEvent.create({
+      data: { actionId: row.id, event: "FAILED", actorType: "system", payload: { reason: "POST_EXECUTION_VERIFICATION_FAILED", verifiedHash } },
+    });
+    await prisma.richoShopifyAction.update({ where: { id: row.id }, data: { status: "failed" } });
+    throw new Error("RICHO_POST_EXECUTION_VERIFICATION_FAILED");
+  }
+
   await prisma.$transaction([
     prisma.richoShopifyAction.update({ where: { id: row.id }, data: { status: "executed", executedAt: new Date() } }),
     prisma.richoShopifyAuditEvent.create({
@@ -87,10 +103,10 @@ export async function executeApprovedProductUpdate(args: {
         actionId: row.id,
         event: "EXECUTED",
         actorType: "system",
-        payload: { idempotencyKey: args.idempotencyKey, product: result?.product ?? null },
+        payload: { idempotencyKey: args.idempotencyKey, product: result?.product ?? null, verified: true, verifiedHash },
       },
     }),
   ]);
 
-  return result?.product ?? null;
+  return { product: result?.product ?? null, verified: true, verifiedHash };
 }
