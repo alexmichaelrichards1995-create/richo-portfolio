@@ -8,7 +8,8 @@ import { rankProducts } from "../lib/product-intelligence.server";
 import { fetchProductState, hashProductState, rollbackSnapshot } from "../lib/product-state.server";
 import { executeApprovedProductUpdate } from "../lib/shopify-product-executor.server";
 import { rollbackExecutedProductUpdate } from "../lib/shopify-product-rollback.server";
-import { listExperiments, markExperimentRolledBack, measureExperiment, startExperiment, type ExperimentMetrics } from "../lib/experiment-ledger.server";
+import { listExperiments, markExperimentRolledBack, measureExperiment, startExperiment } from "../lib/experiment-ledger.server";
+import { fetchProductExperimentMetrics } from "../lib/product-experiment-metrics.server";
 
 function numberCell(row: unknown[], index: number) {
   const value = Number(row[index] ?? 0);
@@ -17,28 +18,6 @@ function numberCell(row: unknown[], index: number) {
 
 function isoDate(date: Date) { return date.toISOString().slice(0, 10); }
 function addDays(date: Date, days: number) { const d = new Date(date); d.setUTCDate(d.getUTCDate() + days); return d; }
-
-async function fetchExperimentMetrics(adminGraphql: any, from: Date, to: Date): Promise<ExperimentMetrics> {
-  const since = isoDate(from);
-  const until = isoDate(to);
-  const response = await adminGraphql(`#graphql
-    query RichoExperimentMetrics {
-      funnel: shopifyqlQuery(query: "FROM sessions SHOW sessions, sessions_with_cart_additions, sessions_that_reached_checkout, sessions_that_completed_checkout SINCE ${since} UNTIL ${until}") { tableData { rows } parseErrors }
-      sales: shopifyqlQuery(query: "FROM sales SHOW orders, total_sales SINCE ${since} UNTIL ${until}") { tableData { rows } parseErrors }
-    }
-  `);
-  const json = await response.json();
-  const funnelRows: unknown[][] = json?.data?.funnel?.tableData?.rows ?? [];
-  const salesRows: unknown[][] = json?.data?.sales?.tableData?.rows ?? [];
-  return {
-    sessions: funnelRows.reduce((n, r) => n + numberCell(r, 0), 0),
-    addToCarts: funnelRows.reduce((n, r) => n + numberCell(r, 1), 0),
-    checkouts: funnelRows.reduce((n, r) => n + numberCell(r, 2), 0),
-    purchases: funnelRows.reduce((n, r) => n + numberCell(r, 3), 0),
-    orders: salesRows.reduce((n, r) => n + numberCell(r, 0), 0),
-    revenue: salesRows.reduce((n, r) => n + numberCell(r, 1), 0),
-  };
-}
 
 export async function action({ request }: ActionFunctionArgs) {
   const { admin, session } = await authenticate.admin(request);
@@ -58,11 +37,17 @@ export async function action({ request }: ActionFunctionArgs) {
     const payload = row.mutationPayload as { kind?: string; productId?: string } | null;
     if (payload?.kind !== "product_update" || !payload.productId || !row.expectedStateHash) throw new Response("Action has no executable product envelope", { status: 400 });
 
-    const now = new Date();
-    const baseline = await fetchExperimentMetrics(admin.graphql, addDays(now, -7), addDays(now, -1));
-    await startExperiment({ shopDomain: session.shop, actionId, baseline });
-
     const currentState = await fetchProductState(admin.graphql, payload.productId);
+    const now = new Date();
+    const baseline = await fetchProductExperimentMetrics({
+      adminGraphql: admin.graphql,
+      productTitle: currentState.title,
+      productHandle: currentState.handle,
+      from: addDays(now, -7),
+      to: addDays(now, -1),
+    });
+    await startExperiment({ shopDomain: session.shop, actionId, baseline, targetProductId: payload.productId });
+
     await executeApprovedProductUpdate({
       shopDomain: session.shop,
       actionId,
@@ -77,10 +62,18 @@ export async function action({ request }: ActionFunctionArgs) {
     const experiments = await listExperiments(session.shop);
     const experiment = experiments.find((e) => e.actionId === actionId && e.status === "running");
     if (!experiment) throw new Response("Running experiment not found", { status: 404 });
+    if (!experiment.targetProductId) throw new Response("Experiment has no product attribution target", { status: 400 });
     const started = new Date(experiment.startedAt);
     const readyAt = addDays(started, 7);
     if (new Date() < readyAt) throw new Response(`Measurement window not complete until ${isoDate(readyAt)}`, { status: 409 });
-    const outcome = await fetchExperimentMetrics(admin.graphql, started, addDays(started, 6));
+    const product = await fetchProductState(admin.graphql, experiment.targetProductId);
+    const outcome = await fetchProductExperimentMetrics({
+      adminGraphql: admin.graphql,
+      productTitle: product.title,
+      productHandle: product.handle,
+      from: started,
+      to: addDays(started, 6),
+    });
     await measureExperiment({ shopDomain: session.shop, actionId, outcome });
     return { ok: true, intent };
   }
@@ -142,7 +135,7 @@ export default function RichoOperationsHome() {
     <section style={{marginTop:28}}><h2>Product Intelligence</h2><div style={{display:"grid",gap:8}}>{productIntelligence.map(p=><article key={p.id} style={{border:"1px solid #e5e5e5",borderRadius:10,padding:14}}><strong>{p.title} · {p.score}/100</strong><p>{p.issues.length ? p.issues.join(" · ") : "No structural issues detected."}</p><small>{p.recommendation}</small></article>)}</div></section>
     <section style={{marginTop:28}}><h2>Approval Queue</h2><div style={{display:"grid",gap:10}}>{approvalQueue.map(a=>{const rolledBack=a.auditEvents.some(e=>e.event==="ROLLED_BACK");return <article key={a.id} style={{border:"1px solid #ddd",borderRadius:10,padding:16}}><strong>{a.title}</strong><p>{a.evidence}</p><p>{a.recommendation}</p><small>Agent: {a.agent} · Risk: {a.risk} · Status: {rolledBack ? "rolled back" : a.status}</small>{a.status === "proposed" && <Form method="post" style={{display:"flex",gap:8,marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="approved">Approve</button><button name="intent" value="rejected">Reject</button></Form>}{a.status === "approved" && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="execute">Execute Approved Change</button></Form>}{a.status === "executed" && !rolledBack && a.reversible && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="rollback">Rollback Executed Change</button></Form>}</article>})}</div></section>
     <section style={{marginTop:28}}><h2>Audit Ledger</h2><p>{auditCount} persisted audit event(s) across the current operating queue.</p></section>
-    <section style={{marginTop:28}}><h2>Conversion Lab</h2><p>Current funnel: {snapshot.sessions} sessions → {snapshot.addToCarts} carts → {snapshot.checkouts} checkouts → {snapshot.purchases} purchases.</p><div style={{display:"grid",gap:10}}>{experiments.map(e=><article key={e.id} style={{border:"1px solid #ddd",borderRadius:10,padding:14}}><strong>{e.actionId}</strong><p>Status: {e.status}{e.impact ? ` · Impact: ${String(e.impact).replace("_"," ")}` : ""}</p><small>Baseline: {e.baseline.sessions} sessions · {e.baseline.purchases} purchases · A${e.baseline.revenue}</small>{e.outcome && <p><small>Outcome: {e.outcome.sessions} sessions · {e.outcome.purchases} purchases · A${e.outcome.revenue}</small></p>}{e.status === "running" && <Form method="post" style={{marginTop:10}}><input type="hidden" name="actionId" value={e.actionId}/><button name="intent" value="measure">Measure 7-Day Outcome</button></Form>}</article>)}</div></section>
+    <section style={{marginTop:28}}><h2>Conversion Lab</h2><p>Current funnel: {snapshot.sessions} sessions → {snapshot.addToCarts} carts → {snapshot.checkouts} checkouts → {snapshot.purchases} purchases.</p><div style={{display:"grid",gap:10}}>{experiments.map(e=><article key={e.id} style={{border:"1px solid #ddd",borderRadius:10,padding:14}}><strong>{e.actionId}</strong><p>Status: {e.status}{e.impact ? ` · Impact: ${String(e.impact).replace("_"," ")}` : ""}{e.confidence ? ` · Confidence: ${e.confidence}` : ""}</p>{e.recommendation && <p><strong>R.I.C.H.O. recommendation:</strong> {String(e.recommendation).replace(/_/g," ")}</p>}<small>Baseline: {e.baseline.sessions} product sessions · {e.baseline.purchases} completed-checkout sessions · A${e.baseline.revenue} attributed sales</small>{e.outcome && <p><small>Outcome: {e.outcome.sessions} product sessions · {e.outcome.purchases} completed-checkout sessions · A${e.outcome.revenue} attributed sales</small></p>}{e.status === "running" && <Form method="post" style={{marginTop:10}}><input type="hidden" name="actionId" value={e.actionId}/><button name="intent" value="measure">Measure 7-Day Outcome</button></Form>}</article>)}</div></section>
   </main>;
 }
 function Metric({label,value}:{label:string;value:string|number}){return <article style={{border:"1px solid #e3e3e3",borderRadius:12,padding:16}}><div style={{opacity:.65,fontSize:13}}>{label}</div><div style={{fontSize:24,fontWeight:700}}>{value}</div></article>}
