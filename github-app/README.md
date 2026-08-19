@@ -1,6 +1,6 @@
 # R.I.C.H.O. GitHub App Core
 
-Runnable GitHub App / Marketplace SaaS core for R.I.C.H.O. Systems. This service is isolated under `github-app/` so the existing portfolio site can remain unchanged.
+Runnable GitHub App / Marketplace SaaS core for R.I.C.H.O. Systems. This service is isolated under `github-app/` and uses its own PostgreSQL domain.
 
 ## What works in this build
 
@@ -13,10 +13,9 @@ Runnable GitHub App / Marketplace SaaS core for R.I.C.H.O. Systems. This service
 - Server-side feature entitlements for Free, Starter, Professional, Business and Enterprise tiers.
 - Durable jobs with bounded retry, exponential backoff and dead-job state.
 - PR events can create a real `R.I.C.H.O. Guard` GitHub Check Run after installation credentials are configured.
-- Liveness/readiness endpoints.
-- Minimal signed-in dashboard.
-- Admin dead-job/replay API protected by `ADMIN_TOKEN`.
-- Unit tests plus PostgreSQL-backed integration tests in GitHub Actions.
+- Public liveness plus privacy-minimised readiness.
+- Admin-only detailed readiness and job/replay APIs protected by `ADMIN_TOKEN`.
+- Unit tests, PostgreSQL-backed integration tests, exact-container smoke tests and zero-provision staging rehearsal validation in GitHub Actions.
 
 ## Required GitHub App configuration
 
@@ -24,7 +23,7 @@ Use the least privilege needed for the enabled features.
 
 ### URLs
 
-- Homepage URL: your public service URL
+- Homepage URL: your approved public service URL
 - Callback URL: `https://YOUR-HOST/auth/github/callback`
 - Webhook URL: `https://YOUR-HOST/webhooks/github`
 
@@ -34,7 +33,7 @@ Use the least privilege needed for the enabled features.
 - Pull requests: Read
 - Checks: Read & write
 
-Add `Contents: Read`, `Issues: Read`, or `Deployments: Write` only when the corresponding product modules are activated. Do not request organization-administration permission for this core.
+Add `Contents: Read`, `Issues: Read`, or other permissions only when the corresponding product modules are deliberately activated. Do not request organization-administration permission for this core.
 
 ### Events
 
@@ -44,13 +43,13 @@ For the currently implemented handlers subscribe to:
 - `pull_request`
 - `marketplace_purchase` when the Marketplace listing/billing integration is enabled
 
-The code can also accept `push` and `issues` events if you later subscribe to those events and enable their related modules.
+The code can also accept `push` and `issues` events if those modules are later enabled and their permissions/events are deliberately approved.
 
 ## Environment
 
-Copy `.env.example` into your deployment environment. Never commit real secrets.
+Copy `.env.example` into a local/deployment secret environment. Never commit real secrets.
 
-Required for full readiness:
+Required for full canonical readiness:
 
 - `DATABASE_URL`
 - `GITHUB_APP_ID`
@@ -62,26 +61,26 @@ Required for full readiness:
 - `ADMIN_TOKEN`
 - `PUBLIC_BASE_URL`
 
-Generate `SESSION_SECRET`, `ADMIN_TOKEN` and `GITHUB_WEBHOOK_SECRET` from a cryptographically secure random source. Keep the GitHub private key in the deployment platform's secret manager.
+Generate security secrets from a cryptographically secure random source. Keep private keys and all secret values in the deployment provider's secret manager.
 
 ## Local run
 
-Requirements: Node.js 22+ and PostgreSQL.
+Requirements: Node.js 22 and PostgreSQL.
 
 ```bash
 cd github-app
-npm install
+npm ci --no-audit --no-fund
 export DATABASE_URL='postgresql://postgres:postgres@localhost:5432/richo_github_app'
-node scripts/migrate.js
-npm test
-node src/server.js
+npm run migrate
+npm run check
+npm start
 ```
 
 Then open `http://localhost:3000/health/live`.
 
-`/health/ready` returns HTTP 200 only when the database and all GitHub/OAuth/security credentials required for a complete installation are present.
+Canonical startup is `node src/hardened-entrypoint.js`. Database migrations are **not** run during application/container startup.
 
-## Docker
+## Docker / OCI runtime
 
 ```bash
 cd github-app
@@ -89,7 +88,9 @@ docker build -t richo-github-app .
 docker run --rm -p 3000:3000 --env-file .env richo-github-app
 ```
 
-The container applies the SQL migrations before starting. For a multi-replica production deployment, move migration execution to a single release/pre-deploy job before horizontal scaling.
+The image starts the application only. Run `npm run migrate` as a separate, owner-gated release/pre-deploy step against the dedicated Marketplace database before promoting a new application revision.
+
+The canonical hosting contract is an always-running OCI container service because the current application owns recurring durable-job and cancellation-reconciliation loops. See `HOSTING_CONTRACT.md`.
 
 ## Webhook processing path
 
@@ -125,13 +126,29 @@ A periodic reconciler expires pending cancellations whose effective date has arr
 
 ## Health endpoints
 
-- `GET /health/live` — process is alive.
-- `GET /health/ready` — database + GitHub App + OAuth + signing configuration is complete.
+- `GET /health/live` — process liveness.
+- `GET /health/ready` — public readiness. Response body contains only `{ "ok": true }` or `{ "ok": false }`.
+- `GET /admin/health/ready` — detailed component readiness; requires `x-admin-token: <ADMIN_TOKEN>` and reports booleans only, not secret values.
+
+Readiness fails closed if the required GitHub App/OAuth/session/admin configuration or database dependency is unavailable.
 
 ## Admin operations
 
-`GET /admin/jobs` and `POST /admin/jobs/:id/replay` require an `x-admin-token` header equal to `ADMIN_TOKEN`. Do not expose this token to a browser client.
+`GET /admin/health/ready`, `GET /admin/jobs`, and `POST /admin/jobs/:id/replay` require an `x-admin-token` header equal to `ADMIN_TOKEN`. Never expose this token to a browser client or evidence document.
+
+## Zero-provision staging rehearsal
+
+The repository contains an inert rehearsal package under `rehearsal/`:
+
+- `github-app-settings.staging.json.example` — least-privilege staging callback/webhook/event template.
+- `staging.env.example` — secret-name-only staging environment template with live-money/Connect/payout gates disabled.
+- `MIGRATION_BACKUP_REHEARSAL.md` — backup, migration, restore and rollback evidence procedure.
+- `collect-staging-evidence.mjs` — redacted runtime/migration evidence collector for an already-approved staging service.
+- `RCP_STAGING_RECEIPTS.md` — blank `RCP-STG-001` through `RCP-STG-010` evidence pack.
+- `validate-rehearsal-package.mjs` — fail-closed policy validator executed by `npm run check`.
+
+These files do not provision infrastructure, mutate GitHub App settings, install credentials, apply remote migrations, spend money or authorize production.
 
 ## Current boundary
 
-This is a working service core, not a claim that the external GitHub App and paid Marketplace listing are already approved. A live end-to-end installation still requires a registered GitHub App, its generated credentials/private key, a public HTTPS deployment, PostgreSQL, and (for paid sales) GitHub Marketplace publisher/listing approval.
+This is a verified service core and deployment/rehearsal contract, not a claim that external staging or production infrastructure, GitHub Marketplace publisher approval, callbacks/webhooks, credentials or paid listings are already live. Those remain separate owner-gated actions.
