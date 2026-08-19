@@ -17,6 +17,16 @@ function isRollbackPayload(value: unknown): value is RollbackPayload {
   return v.kind === "product_update" && typeof v.productId === "string";
 }
 
+function restoredStateMatches(rollback: RollbackPayload, state: Awaited<ReturnType<typeof fetchProductState>>) {
+  if (rollback.title !== undefined && state.title !== rollback.title) return false;
+  if (rollback.descriptionHtml !== undefined && state.descriptionHtml !== rollback.descriptionHtml) return false;
+  if (rollback.seo !== undefined) {
+    if ((state.seo?.title ?? null) !== (rollback.seo.title ?? null)) return false;
+    if ((state.seo?.description ?? null) !== (rollback.seo.description ?? null)) return false;
+  }
+  return true;
+}
+
 export async function rollbackExecutedProductUpdate(args: {
   shopDomain: string;
   actionId: string;
@@ -29,6 +39,7 @@ export async function rollbackExecutedProductUpdate(args: {
   });
   if (!row) throw new Error("RICHO_ACTION_NOT_FOUND");
   if (row.status !== "executed") throw new Error("RICHO_ROLLBACK_REQUIRES_EXECUTED_ACTION");
+  if (!row.auditEvents.some((event) => event.event === "ROLLBACK_APPROVED")) throw new Error("RICHO_ROLLBACK_REQUIRES_HUMAN_APPROVAL");
   if (row.auditEvents.some((event) => event.event === "ROLLED_BACK")) throw new Error("RICHO_ACTION_ALREADY_ROLLED_BACK");
   if (!isRollbackPayload(row.rollbackPayload)) throw new Error("RICHO_ROLLBACK_PAYLOAD_INVALID");
 
@@ -52,17 +63,40 @@ export async function rollbackExecutedProductUpdate(args: {
   if (errors.length) throw new Error(`RICHO_ROLLBACK_FAILED: ${errors.map((e: {message:string}) => e.message).join("; ")}`);
 
   const restoredState = await fetchProductState(args.adminGraphql, rollback.productId);
+  if (!restoredStateMatches(rollback, restoredState)) {
+    await prisma.richoShopifyAuditEvent.create({
+      data: {
+        actionId: row.id,
+        event: "ROLLBACK_VERIFICATION_FAILED",
+        actorType: "system",
+        evidence: "Rollback mutation returned without Shopify errors but restored state did not match the captured rollback snapshot.",
+      },
+    });
+    throw new Error("RICHO_ROLLBACK_VERIFICATION_FAILED");
+  }
+
   const restoredHash = hashProductState(restoredState);
+  await prisma.$transaction([
+    prisma.richoShopifyAuditEvent.create({
+      data: {
+        actionId: row.id,
+        event: "ROLLED_BACK",
+        actorType: "human",
+        actorId: args.actorId,
+        evidence: "Approved rollback executed and restored Shopify state verified against the captured rollback snapshot.",
+        payload: { product: result?.product ?? null, restoredHash },
+      },
+    }),
+    prisma.richoShopifyAuditEvent.create({
+      data: {
+        actionId: row.id,
+        event: "ROLLBACK_VERIFIED",
+        actorType: "system",
+        evidence: "Post-rollback verification succeeded.",
+        payload: { restoredHash, restoredState },
+      },
+    }),
+  ]);
 
-  await prisma.richoShopifyAuditEvent.create({
-    data: {
-      actionId: row.id,
-      event: "ROLLED_BACK",
-      actorType: "human",
-      actorId: args.actorId,
-      payload: { product: result?.product ?? null, restoredHash },
-    },
-  });
-
-  return { product: result?.product ?? null, restoredHash };
+  return { product: result?.product ?? null, restoredHash, restoredState };
 }
