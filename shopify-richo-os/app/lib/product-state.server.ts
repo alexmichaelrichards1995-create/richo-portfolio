@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { resilientAdminGraphql } from "./shopify-retry.server";
 
 export type ProductState = {
   id: string;
@@ -32,7 +33,8 @@ export function rollbackSnapshot(state: ProductState) {
 }
 
 export async function fetchProductState(adminGraphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>, productId: string): Promise<ProductState> {
-  const response = await adminGraphql(`#graphql
+  const graphql = resilientAdminGraphql(adminGraphql);
+  const response = await graphql(`#graphql
     query RichoProductState($id: ID!) {
       product(id: $id) {
         id title handle descriptionHtml status updatedAt
