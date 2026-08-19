@@ -30,6 +30,12 @@ jobs:
       - name: Install standalone dependencies
         working-directory: shopify-richo-os
         run: npm install --no-audit --no-fund
+      - name: Audit dependencies for critical vulnerabilities
+        working-directory: shopify-richo-os
+        run: npm audit --audit-level=critical
+      - name: Validate Prisma schema
+        working-directory: shopify-richo-os
+        run: npx prisma validate
       - name: Generate Prisma client
         working-directory: shopify-richo-os
         run: npx prisma generate
