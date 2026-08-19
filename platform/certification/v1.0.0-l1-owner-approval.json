@@ -1,0 +1,20 @@
+{
+  "version": "v1.0.0-l1",
+  "level": "L1",
+  "decision": "GO",
+  "approvedBy": "Alex Richards",
+  "authority": "Owner",
+  "approvedAt": "2026-08-19T20:56:00+10:00",
+  "scope": "L1 final certification and baseline freeze",
+  "technicalEvidence": {
+    "workflowRunId": 32244630892,
+    "headSha": "50decbfaf2d662b9b3ac754246af47fdaefc78e9",
+    "evidenceArtifactId": 9362169279,
+    "evidenceDigest": "sha256:c4c21c1ad0f7c201dda9bfc3e4db77625b558992edf4317a1a7fbe32ec865691",
+    "securityAudit": "passed",
+    "deterministicTests": "passed",
+    "rollbackDrill": "passed"
+  },
+  "certification": "CERTIFIED",
+  "nextLevel": "L2 Professional"
+}

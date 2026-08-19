@@ -1,0 +1,16 @@
+const assert=require('assert');
+const{L2PolicyGovernanceProfessional}=require('../src/l2_policy_governance_professional');
+(async()=>{const e=new L2PolicyGovernanceProfessional({clock:()=>new Date('2026-08-19T12:00:00Z')});
+await e.publishPolicy({name:'prod-change',version:'2.0.0',scope:'deploy.production',environment:'production',priority:10,effect:'require_approval',conditions:{capability:'deployment.promote'},requiresApprovals:[{role:'release-owner'},{role:'security-owner'}],separationOfDuties:[{proposerCannotApprove:true}]});
+let d=await e.evaluate({actor:{id:'release-ai'},scope:'deploy.production',environment:'production',capability:'deployment.promote',proposedBy:'release-ai',approver:'owner'});assert.equal(d.decision,'require_approval');assert.equal(d.approvalChain.length,2);
+d=await e.evaluate({actor:{id:'release-ai'},scope:'deploy.production',environment:'production',capability:'deployment.promote',proposedBy:'release-ai',approver:'release-ai'});assert.equal(d.decision,'deny');assert.equal(d.reason,'separation_of_duties_violation');
+await e.publishPolicy({name:'global-allow',version:'1',scope:'sales',environment:'*',priority:20,effect:'allow',conditions:{capability:'sales.offer'}});
+d=await e.evaluate({actor:{id:'sales-ai'},scope:'sales.offer',environment:'staging',capability:'sales.offer'});assert.equal(d.decision,'allow');
+const g=await e.grantDelegation({principal:'sales-ai',capabilities:['pricing.discount'],scope:'sales',environment:'production',expiresAt:'2026-08-20T00:00:00Z',grantedBy:'owner',reason:'campaign'});assert.ok(g.id);
+await e.publishPolicy({name:'discount',version:'1',scope:'sales',environment:'production',priority:15,effect:'allow',conditions:{capability:'pricing.discount'}});
+d=await e.evaluate({actor:{id:'sales-ai'},scope:'sales.discount',environment:'production',capability:'pricing.discount',requiresDelegation:true});assert.equal(d.decision,'allow');
+await e.publishPolicy({name:'deny-conflict',version:'1',scope:'sales',environment:'production',priority:15,effect:'deny',conditions:{capability:'pricing.discount'}});
+d=await e.evaluate({actor:{id:'sales-ai'},scope:'sales.discount',environment:'production',capability:'pricing.discount'});assert.equal(d.decision,'deny');assert.ok(d.conflicts.length>0);
+const sim=await e.simulate({actor:{id:'sales-ai'},scope:'sales.offer',environment:'staging',capability:'sales.offer'},[{environment:'staging'},{environment:'production'}]);assert.equal(sim.length,2);
+const reg=await e.regressionCheck([{name:'sales allow',request:{actor:{id:'sales-ai'},scope:'sales.offer',environment:'staging',capability:'sales.offer'},expected:'allow'}]);assert.equal(reg.passed,true);
+assert.ok(e.governanceSnapshot().decisions>=4);console.log('l2_policy_governance_professional.test.js passed');})().catch(e=>{console.error(e);process.exit(1)});

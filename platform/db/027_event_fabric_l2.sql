@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS richo_event_schemas(id uuid PRIMARY KEY DEFAULT gen_random_uuid(),event_type text NOT NULL,version integer NOT NULL,schema jsonb NOT NULL,compatibility text NOT NULL DEFAULT 'backward',created_at timestamptz NOT NULL DEFAULT now(),UNIQUE(event_type,version));
+CREATE TABLE IF NOT EXISTS richo_event_consumer_offsets(consumer_id text NOT NULL,event_type text NOT NULL,offset_value bigint NOT NULL DEFAULT 0,updated_at timestamptz NOT NULL DEFAULT now(),PRIMARY KEY(consumer_id,event_type));
+CREATE TABLE IF NOT EXISTS richo_event_deliveries(id uuid PRIMARY KEY,consumer_id text NOT NULL,event_id uuid NOT NULL,attempt integer NOT NULL,status text NOT NULL,duration_ms integer,error text,result_hash text,created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS richo_event_quarantine(id uuid PRIMARY KEY,event_id uuid NOT NULL,consumer_id text NOT NULL,event_type text NOT NULL,payload_hash text,reason text NOT NULL,quarantined_at timestamptz NOT NULL);
+CREATE TABLE IF NOT EXISTS richo_event_replays(id uuid PRIMARY KEY,event_id uuid NOT NULL,consumer_id text NOT NULL,approved_by text,status text NOT NULL,created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS richo_event_partition_sequences(partition_key text PRIMARY KEY,last_sequence bigint NOT NULL DEFAULT 0,updated_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS richo_event_delivery_consumer_idx ON richo_event_deliveries(consumer_id,event_id,created_at DESC);

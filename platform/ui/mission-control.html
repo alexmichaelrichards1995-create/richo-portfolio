@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>R.I.C.H.O. Mission Control</title>
+  <link rel="stylesheet" href="./mission-control.css" />
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">R.I.C.H.O. SYSTEMS</p>
+        <h1>Mission Control</h1>
+        <p class="sub">AI workforce, runtime health, approvals, jobs and operating memory.</p>
+      </div>
+      <button id="refresh" class="btn">Refresh</button>
+    </header>
+
+    <section class="metrics" id="metrics"></section>
+
+    <section>
+      <div class="section-head">
+        <h2>AI Operating Sections</h2>
+        <span id="generated-at"></span>
+      </div>
+      <div class="grid" id="sections"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-head"><h2>Recent Jobs</h2></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Status</th><th>Section</th><th>Agent</th><th>Operation</th><th>Created</th></tr></thead>
+          <tbody id="jobs"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="drawer" id="drawer" aria-hidden="true">
+      <button id="close-drawer" class="close">×</button>
+      <div id="detail"></div>
+    </aside>
+  </main>
+  <script src="./mission-control.js"></script>
+</body>
+</html>
