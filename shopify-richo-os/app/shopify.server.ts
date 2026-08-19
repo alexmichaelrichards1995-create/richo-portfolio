@@ -1,7 +1,7 @@
 import "@shopify/shopify-app-react-router/adapters/node";
 
 import {
-  LATEST_API_VERSION,
+  ApiVersion,
   AppDistribution,
   shopifyApp,
 } from "@shopify/shopify-app-react-router/server";
@@ -13,22 +13,27 @@ if (process.env.NODE_ENV === "production") {
   assertProductionReadiness();
 }
 
+const SHOPIFY_API_VERSION = ApiVersion.October25;
+
 const shopify = shopifyApp({
-  apiKey: process.env.SHOPIFY_API_KEY!,
-  apiSecretKey: process.env.SHOPIFY_API_SECRET!,
-  apiVersion: LATEST_API_VERSION,
+  apiKey: process.env.SHOPIFY_API_KEY || "",
+  apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
+  apiVersion: SHOPIFY_API_VERSION,
   scopes: process.env.SCOPES?.split(","),
-  appUrl: process.env.SHOPIFY_APP_URL!,
+  appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
+  future: {
+    expiringOfflineAccessTokens: true,
+  },
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
 });
 
 export default shopify;
-export const apiVersion = LATEST_API_VERSION;
+export const apiVersion = SHOPIFY_API_VERSION;
 export const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 export const authenticate = shopify.authenticate;
 export const unauthenticated = shopify.unauthenticated;
