@@ -38,15 +38,17 @@ test('Checkout preserves hosted dynamic-payment security posture', async () => {
   assert.doesNotMatch(checkout, /automatic_tax/)
 })
 
-test('Download checkout requires and snapshots secure Storage delivery metadata', async () => {
+test('Checkout snapshots secure delivery metadata without misclassifying services as downloads', async () => {
   const checkout = await source('app/api/checkout/route.ts')
 
   assert.match(checkout, /metadataString\(product\.metadata, 'storage_bucket'\)/)
   assert.match(checkout, /metadataString\(product\.metadata, 'storage_path'\)/)
+  assert.match(checkout, /metadataString\(product\.metadata, 'delivery_asset_kind'\)/)
   assert.match(checkout, /product\.delivery_mode === 'download'/)
   assert.match(checkout, /Download product is not configured for secure delivery/)
   assert.match(checkout, /storage_bucket: storageBucket/)
   assert.match(checkout, /storage_path: storagePath/)
+  assert.match(checkout, /delivery_asset_kind: deliveryAssetKind/)
   assert.match(checkout, /metadata: orderItemMetadata/)
 })
 
@@ -116,22 +118,68 @@ test('Stripe mock transport is isolated to test mode and non-production hosts', 
   assert.match(workflow, /STRIPE_TEST_MOCK_ENABLED: 'true'/)
 })
 
-test('Secure download requires owned active in-window entitlement and short-lived signed URL', async () => {
+test('Secure delivery requires owned active in-window entitlement and constrained asset type', async () => {
   const download = await source('app/api/entitlements/[id]/download/route.ts')
 
   assert.match(download, /auth\.getClaims\(\)/)
   assert.match(download, /\.from\('entitlements'\)/)
   assert.match(download, /\.eq\('user_id', claims\.sub\)/)
   assert.match(download, /entitlement\.status !== 'active'/)
-  assert.match(download, /entitlement\.entitlement_type !== 'download'/)
   assert.match(download, /accessWindowIsActive\(entitlement\.starts_at, entitlement\.expires_at\)/)
-  assert.match(download, /Date\.parse\(startsAt\) > now/)
-  assert.match(download, /Date\.parse\(expiresAt\) <= now/)
-  assert.match(download, /storage_bucket/)
-  assert.match(download, /storage_path/)
-  assert.match(download, /createSignedUrl\(path, 120, \{ download: true \}\)/)
-  assert.match(download, /Cache-Control': 'no-store'/)
+  assert.match(download, /entitlementType === 'download'/)
+  assert.match(download, /entitlementType === 'service_access' && assetKind === 'onboarding'/)
+  assert.match(download, /bucket !== DELIVERY_BUCKET/)
+  assert.match(download, /safeStoragePath\(path\)/)
+  assert.match(download, /createSignedUrl\(path, SIGNED_URL_TTL_SECONDS, \{ download: true \}\)/)
+  assert.match(download, /SIGNED_URL_TTL_SECONDS = 120/)
+  assert.match(download, /Cache-Control', 'no-store'/)
   assert.doesNotMatch(download, /getPublicUrl/)
+})
+
+test('Every issued delivery URL receives a server-only evidence receipt', async () => {
+  const download = await source('app/api/entitlements/[id]/download/route.ts')
+  const receipts = await source('app/api/entitlements/[id]/receipts/route.ts')
+
+  assert.match(download, /\.from\('audit_events'\)/)
+  assert.match(download, /event_type: 'delivery\.signed_url_issued'/)
+  assert.match(download, /entity_type: 'entitlement'/)
+  assert.match(download, /X-RICHO-Delivery-Receipt/)
+  assert.match(receipts, /auth\.getClaims\(\)/)
+  assert.match(receipts, /\.eq\('user_id', claims\.sub\)/)
+  assert.match(receipts, /\.from\('audit_events'\)/)
+  assert.match(receipts, /\.eq\('actor_user_id', claims\.sub\)/)
+  assert.match(receipts, /\.eq\('event_type', 'delivery\.signed_url_issued'\)/)
+  assert.match(receipts, /\.limit\(20\)/)
+})
+
+test('Canonical Pilot seed mirrors verified commercial identity and private onboarding asset', async () => {
+  const seed = await source('supabase/seed.sql')
+  const onboarding = await source('supabase/richo-digital-deliveries/richo-pilot-199/RICHO_AI_Operations_Pilot_Onboarding.md')
+
+  assert.match(seed, /'RICHO-PILOT-199'/)
+  assert.match(seed, /'service'/)
+  assert.match(seed, /'service_delivery'/)
+  assert.match(seed, /19900/)
+  assert.match(seed, /'AUD'/)
+  assert.match(seed, /'richo-digital-deliveries'/)
+  assert.match(seed, /'delivery_asset_kind', 'onboarding'/)
+  assert.match(onboarding, /SKU:\*\* RICHO-PILOT-199/)
+  assert.match(onboarding, /Human-review requirements/)
+})
+
+test('Controlled purchase CI cannot enable live money', async () => {
+  const workflow = await source('.github/workflows/controlled-commerce-ci.yml')
+  const testPurchase = await source('tests/controlled-test-purchase.mjs')
+
+  assert.match(workflow, /STRIPE_MODE: test/)
+  assert.match(workflow, /RICHO_LIVE_PAYMENTS_ENABLED: 'false'/)
+  assert.match(workflow, /stripe\/stripe-mock:v0\.202\.0/)
+  assert.match(workflow, /npx supabase db reset/)
+  assert.match(workflow, /npx supabase seed buckets/)
+  assert.match(testPurchase, /controlled purchase must run in Stripe test mode/)
+  assert.match(testPurchase, /live payments must remain disabled/)
+  assert.match(testPurchase, /checkout\.session\.completed/)
+  assert.match(testPurchase, /duplicate webhook must not duplicate entitlement/)
 })
 
 test('Checkout return never acts as payment or entitlement proof', async () => {
@@ -140,8 +188,10 @@ test('Checkout return never acts as payment or entitlement proof', async () => {
   assert.match(dashboard, /checkoutReturned/)
   assert.match(dashboard, /Payment and access are confirmed only after the signed Stripe webhook is reconciled/)
   assert.match(dashboard, /order and entitlement states below are the authoritative result/)
-  assert.match(dashboard, /entitlement\.entitlement_type === 'download' && entitlement\.status === 'active'/)
-  assert.match(dashboard, /Secure download/)
+  assert.match(dashboard, /entitlement\.entitlement_type === 'download'/)
+  assert.match(dashboard, /entitlement\.entitlement_type === 'service_access'/)
+  assert.match(dashboard, /Open onboarding/)
+  assert.match(dashboard, /Delivery receipts/)
 })
 
 test('Server credentials cannot migrate into browser code', async () => {
