@@ -141,7 +141,7 @@ test('provider-neutral staging checklist requires secret hygiene and ten evidenc
     'SESSION_SECRET',
     'ADMIN_TOKEN',
   ]) {
-    assert.match(checklist, new RegExp(`\\`${secretName}\\``))
+    assert.match(checklist, new RegExp('`' + secretName + '`'))
   }
 
   assert.match(checklist, /PLANNED/)
