@@ -34,6 +34,36 @@ export async function persistProposals(shopDomain: string, actions: ProposedActi
   }
 }
 
+export async function attachExecutionEnvelope(args: {
+  shopDomain: string;
+  actionId: string;
+  expectedStateHash: string;
+  rollbackPayload: Record<string, unknown>;
+  mutationPayload: Record<string, unknown>;
+}) {
+  const action = await prisma.richoShopifyAction.findFirst({
+    where: { id: args.actionId, shopDomain: args.shopDomain },
+  });
+  if (!action) throw new Error("RICHO_ACTION_NOT_FOUND");
+  if (action.status !== "proposed") return action;
+
+  return prisma.richoShopifyAction.update({
+    where: { id: action.id },
+    data: {
+      expectedStateHash: args.expectedStateHash,
+      rollbackPayload: args.rollbackPayload,
+      mutationPayload: args.mutationPayload,
+    },
+  });
+}
+
+export async function getAction(shopDomain: string, actionId: string) {
+  return prisma.richoShopifyAction.findFirst({
+    where: { id: actionId, shopDomain },
+    include: { auditEvents: { orderBy: { createdAt: "asc" } } },
+  });
+}
+
 export async function listActions(shopDomain: string) {
   return prisma.richoShopifyAction.findMany({
     where: { shopDomain },
@@ -54,6 +84,9 @@ export async function decideAction(args: {
     });
     if (!current) throw new Error("RICHO_ACTION_NOT_FOUND");
     if (current.status !== "proposed") throw new Error("RICHO_ACTION_ALREADY_DECIDED");
+    if (args.decision === "approved" && (!current.expectedStateHash || !current.rollbackPayload || !current.mutationPayload)) {
+      throw new Error("RICHO_APPROVAL_BLOCKED_MISSING_EXECUTION_ENVELOPE");
+    }
 
     const updated = await tx.richoShopifyAction.update({
       where: { id: current.id },
