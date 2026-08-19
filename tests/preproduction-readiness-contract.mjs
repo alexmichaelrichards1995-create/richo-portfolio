@@ -12,7 +12,6 @@ function hasAssignment(text, name) {
 
 test('public customer liveness does not disclose configuration state', async () => {
   const health = await source('app/api/health/route.ts')
-
   assert.match(health, /service: 'richo-systems-platform'/)
   assert.match(health, /status: 'ok'/)
   assert.match(health, /Cache-Control': 'no-store'/)
@@ -23,7 +22,6 @@ test('public customer liveness does not disclose configuration state', async () 
 
 test('customer readiness fails closed behind server-side dependencies', async () => {
   const readiness = await source('app/api/health/ready/route.ts')
-
   assert.match(readiness, /createAdminClient/)
   assert.match(readiness, /getStripe\(\)/)
   assert.match(readiness, /getStripeWebhookSecret\(\)/)
@@ -38,7 +36,6 @@ test('customer readiness fails closed behind server-side dependencies', async ()
 test('environment examples preserve commercial credential separation and default-off money gates', async () => {
   const rootEnv = await source('.env.example')
   const githubEnv = await source('github-app/.env.example')
-
   assert.equal(hasAssignment(rootEnv, 'STRIPE_MODE'), true)
   assert.match(rootEnv, /^STRIPE_MODE=test$/m)
   assert.match(rootEnv, /^RICHO_LIVE_PAYMENTS_ENABLED=false$/m)
@@ -47,7 +44,6 @@ test('environment examples preserve commercial credential separation and default
   assert.equal(hasAssignment(rootEnv, 'STRIPE_CONNECT_SECRET_KEY'), true)
   assert.match(rootEnv, /^RICHO_MARKETPLACE_CONNECT_ENABLED=false$/m)
   assert.match(rootEnv, /^RICHO_LIVE_PAYOUTS_ENABLED=false$/m)
-
   assert.equal(hasAssignment(githubEnv, 'DATABASE_URL'), true)
   assert.equal(hasAssignment(githubEnv, 'DATABASE_SSL'), true)
   assert.equal(hasAssignment(githubEnv, 'GITHUB_PRIVATE_KEY_B64'), true)
@@ -60,7 +56,6 @@ test('environment examples preserve commercial credential separation and default
 
 test('release runbook keeps infrastructure, rollback, money and owner gates explicit', async () => {
   const runbook = await source('PREPRODUCTION_READINESS.md')
-
   assert.match(runbook, /Current decision: \*\*NO-GO for production activation\*\*/)
   assert.match(runbook, /PRE-001/)
   assert.match(runbook, /PRE-008/)
@@ -78,7 +73,6 @@ test('staging activation approval packet is inert, exact-source gated and zero-s
   const plan = JSON.parse(await source('github-app/approval/staging-activation-plan.json.example'))
   const packet = await source('github-app/approval/STAGING_EXECUTION_APPROVAL_PACKET.md')
   const generator = await source('github-app/approval/generate-staging-dry-run.mjs')
-
   assert.equal(plan.status, 'TEMPLATE_ONLY_NO_EXECUTION')
   assert.equal(plan.environment, 'staging')
   assert.equal(plan.provider.resource_creation_approved, false)
@@ -92,13 +86,41 @@ test('staging activation approval packet is inert, exact-source gated and zero-s
   assert.ok(plan.execution_sequence.filter((step) => step.mutating).every((step) => Boolean(step.gate)))
   assert.ok(Object.values(plan.owner_gates).every((value) => value === false))
   assert.ok(Object.values(plan.hard_stops).every((value) => value === true))
-
   assert.match(packet, /NO EXECUTION AUTHORITY/)
   assert.match(packet, /Any source change after approval invalidates the source\/image approval/i)
   assert.match(packet, /A\$0/)
   assert.match(packet, /Production promotion: \*\*NOT APPROVED BY THIS PACKET\*\*/)
-
   assert.match(generator, /DRY-RUN ONLY/)
   assert.match(generator, /NO COMMANDS WILL BE EXECUTED/)
   assert.doesNotMatch(generator, /child_process|node:https|node:http|\bfetch\s*\(/)
+})
+
+test('owner authorization is externally trust-anchored, short-lived and replay resistant', async () => {
+  const record = JSON.parse(await source('github-app/approval/owner-authorization-record.json.example'))
+  const verifier = await source('github-app/approval/verify-owner-authorization.mjs')
+  const protocol = await source('github-app/approval/OWNER_AUTHORIZATION.md')
+  const ownerTests = await source('github-app/test/owner-authorization.test.mjs')
+
+  assert.equal(record.status, 'TEMPLATE_ONLY_NOT_SIGNED')
+  assert.equal(record.authorization.environment, 'staging')
+  assert.deepEqual(record.authorization.scope.allowed_actions, [])
+  assert.equal(record.authorization.scope.max_spend_aud_cents, 0)
+  assert.equal(record.signature.algorithm, 'Ed25519')
+  assert.equal(Object.hasOwn(record.authorization.owner_key, 'private_key'), false)
+
+  assert.match(verifier, /expectedOwnerKeyFingerprint/)
+  assert.match(verifier, /Supplied owner public key does not match externally pinned trust anchor/)
+  assert.match(verifier, /requestedSpendAudCents <= a\.scope\.max_spend_aud_cents/)
+  assert.match(verifier, /MAX_AUTH_TTL_SECONDS = 4 \* 60 \* 60/)
+  assert.match(verifier, /execution_authorized: false/)
+  assert.match(verifier, /preflight_only: true/)
+  assert.match(verifier, /flag: 'wx'/)
+  assert.match(verifier, /Authorization nonce replay detected during atomic consumption/)
+  assert.doesNotMatch(verifier, /BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY/)
+
+  assert.match(protocol, /NO CURRENT AUTHORIZATION \/ NO PRIVATE KEY IN REPOSITORY/)
+  assert.match(protocol, /durable shared authorization ledger/i)
+  assert.match(protocol, /requested execution budget must satisfy/i)
+  assert.match(ownerTests, /attacker-controlled replacement trust root/)
+  assert.match(ownerTests, /atomically prevents replay/)
 })
