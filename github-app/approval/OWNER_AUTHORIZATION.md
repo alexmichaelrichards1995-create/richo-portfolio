@@ -66,7 +66,7 @@ CI success cannot extend an authorization, create a new authorization, or overri
 
 ## Spend law
 
-`authorization.scope.max_spend_aud_cents` is the upper bound signed by the owner. The actual requested execution budget must satisfy:
+`authorization.scope.max_spend_aud_cents` is the upper bound signed by the owner. The requested execution budget may never exceed the owner-signed cap. The actual requested execution budget must satisfy:
 
 ```text
 0 <= requested_execution_spend_aud_cents <= owner_signed_max_spend_aud_cents
