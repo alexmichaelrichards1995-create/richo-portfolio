@@ -2,6 +2,7 @@ import prisma from "../db.server";
 import { assertExecutionAllowed } from "./execution-gate.server";
 import type { ProposedAction } from "./richo-control-plane.server";
 import { fetchProductState, hashProductState } from "./product-state.server";
+import { resilientAdminGraphql } from "./shopify-retry.server";
 
 type AdminGraphql = (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
 
@@ -26,24 +27,14 @@ export async function executeApprovedProductUpdate(args: {
   idempotencyKey: string;
   adminGraphql: AdminGraphql;
 }) {
-  const row = await prisma.richoShopifyAction.findFirst({
-    where: { id: args.actionId, shopDomain: args.shopDomain },
-    include: { auditEvents: true },
-  });
+  const row = await prisma.richoShopifyAction.findFirst({ where: { id: args.actionId, shopDomain: args.shopDomain }, include: { auditEvents: true } });
   if (!row) throw new Error("RICHO_ACTION_NOT_FOUND");
   if (!isAllowedPayload(row.mutationPayload)) throw new Error("RICHO_MUTATION_NOT_ALLOWLISTED");
 
   const action: ProposedAction = {
-    id: row.id,
-    agent: row.agent as ProposedAction["agent"],
-    title: row.title,
-    evidence: row.evidence,
-    recommendation: row.recommendation,
-    risk: row.risk as ProposedAction["risk"],
-    reversible: row.reversible,
-    requiresHumanApproval: true,
-    status: row.status as ProposedAction["status"],
-    createdAt: row.createdAt.toISOString(),
+    id: row.id, agent: row.agent as ProposedAction["agent"], title: row.title, evidence: row.evidence,
+    recommendation: row.recommendation, risk: row.risk as ProposedAction["risk"], reversible: row.reversible,
+    requiresHumanApproval: true, status: row.status as ProposedAction["status"], createdAt: row.createdAt.toISOString(),
   };
 
   assertExecutionAllowed({
@@ -61,12 +52,10 @@ export async function executeApprovedProductUpdate(args: {
   if (payload.descriptionHtml !== undefined) product.descriptionHtml = payload.descriptionHtml;
   if (payload.seo !== undefined) product.seo = payload.seo;
 
-  const response = await args.adminGraphql(`#graphql
+  const graphql = resilientAdminGraphql(args.adminGraphql);
+  const response = await graphql(`#graphql
     mutation RichoApprovedProductUpdate($product: ProductUpdateInput!) {
-      productUpdate(product: $product) {
-        product { id title updatedAt }
-        userErrors { field message }
-      }
+      productUpdate(product: $product) { product { id title updatedAt } userErrors { field message } }
     }
   `, { variables: { product } });
   const json = await response.json();
@@ -74,9 +63,7 @@ export async function executeApprovedProductUpdate(args: {
   const errors = result?.userErrors ?? [];
 
   if (errors.length > 0) {
-    await prisma.richoShopifyAuditEvent.create({
-      data: { actionId: row.id, event: "FAILED", actorType: "system", payload: errors },
-    });
+    await prisma.richoShopifyAuditEvent.create({ data: { actionId: row.id, event: "FAILED", actorType: "system", payload: errors } });
     await prisma.richoShopifyAction.update({ where: { id: row.id }, data: { status: "failed" } });
     throw new Error(`RICHO_SHOPIFY_MUTATION_FAILED: ${errors.map((e: { message: string }) => e.message).join("; ")}`);
   }
@@ -89,23 +76,14 @@ export async function executeApprovedProductUpdate(args: {
   const verified = seoMatches && titleMatches && descriptionMatches;
 
   if (!verified) {
-    await prisma.richoShopifyAuditEvent.create({
-      data: { actionId: row.id, event: "FAILED", actorType: "system", payload: { reason: "POST_EXECUTION_VERIFICATION_FAILED", verifiedHash } },
-    });
+    await prisma.richoShopifyAuditEvent.create({ data: { actionId: row.id, event: "FAILED", actorType: "system", payload: { reason: "POST_EXECUTION_VERIFICATION_FAILED", verifiedHash } } });
     await prisma.richoShopifyAction.update({ where: { id: row.id }, data: { status: "failed" } });
     throw new Error("RICHO_POST_EXECUTION_VERIFICATION_FAILED");
   }
 
   await prisma.$transaction([
     prisma.richoShopifyAction.update({ where: { id: row.id }, data: { status: "executed", executedAt: new Date() } }),
-    prisma.richoShopifyAuditEvent.create({
-      data: {
-        actionId: row.id,
-        event: "EXECUTED",
-        actorType: "system",
-        payload: { idempotencyKey: args.idempotencyKey, product: result?.product ?? null, verified: true, verifiedHash },
-      },
-    }),
+    prisma.richoShopifyAuditEvent.create({ data: { actionId: row.id, event: "EXECUTED", actorType: "system", payload: { idempotencyKey: args.idempotencyKey, product: result?.product ?? null, verified: true, verifiedHash } } }),
   ]);
 
   return { product: result?.product ?? null, verified: true, verifiedHash };
