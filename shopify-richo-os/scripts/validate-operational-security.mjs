@@ -32,8 +32,8 @@ const checks = {
     "Revoke All Sessions",
     "Security Events",
   ],
-  "app/routes/webhooks.app.uninstalled.tsx": ["claimWebhookReceipt", "BLOCKED"],
-  "app/routes/webhooks.app.scopes_update.tsx": ["claimWebhookReceipt", "lastScopeSyncAt"],
+  "app/routes/webhooks.app.uninstalled.tsx": ["registerWebhookReceipt", "BLOCKED", "X-RICHO-Correlation-Id"],
+  "app/routes/webhooks.app.scopes_update.tsx": ["registerWebhookReceipt", "lastScopeSyncAt", "X-RICHO-Correlation-Id"],
 };
 
 for (const [path, needles] of Object.entries(checks)) {
