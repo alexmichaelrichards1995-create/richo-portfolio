@@ -61,7 +61,7 @@ export async function executeApprovedProductUpdate(args: {
     rollbackPayload: row.rollbackPayload,
   });
 
-  await consumeMutationQuota(args.shopDomain, args.actorId);
+  await consumeMutationQuota({ shopDomain: args.shopDomain, actorId: args.actorId });
 
   const payload = row.mutationPayload as ProductUpdatePayload;
   const product: Record<string, unknown> = { id: payload.productId };
