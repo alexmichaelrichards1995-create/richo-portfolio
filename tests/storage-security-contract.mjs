@@ -16,7 +16,16 @@ test('digital delivery bucket is explicitly private and seeded from repository a
   assert.match(config, /\[storage\.buckets\.richo-digital-deliveries\][\s\S]*?public = false/)
   assert.doesNotMatch(config, /\[storage\.buckets\.richo-digital-deliveries\][\s\S]*?public = true/)
   assert.match(config, /objects_path = "\.\/richo-digital-deliveries"/)
-  assert.match(config, /"text\/markdown"/)
+})
+
+test('private delivery MIME allowlist accepts charset-qualified text while staying document-scoped', () => {
+  assert.match(config, /allowed_mime_types = \[/)
+  assert.match(config, /"text\/\*"/)
+  assert.match(config, /"application\/pdf"/)
+  assert.match(config, /"application\/zip"/)
+  assert.match(config, /"application\/octet-stream"/)
+  assert.doesNotMatch(config, /"image\/\*"/)
+  assert.doesNotMatch(config, /"video\/\*"/)
 })
 
 test('canonical database seed is enabled and contains the Pilot service record', () => {
