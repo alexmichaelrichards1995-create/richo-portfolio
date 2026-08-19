@@ -1,0 +1,109 @@
+name: Apply Marketplace Readiness Hardening Once
+
+on:
+  push:
+    branches:
+      - agent/integrate-commerce-marketplace
+    paths:
+      - '.github/workflows/apply-marketplace-readiness-hardening-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout integration branch
+        uses: actions/checkout@v4
+        with:
+          ref: agent/integrate-commerce-marketplace
+          fetch-depth: 1
+
+      - name: Apply surgical readiness patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('github-app/src/server.js')
+          text = path.read_text(encoding='utf-8')
+
+          route_marker = "async function route(req, res) {"
+          helper = """async function getReadinessState() {
+            const checks = {
+              database: false,
+              webhook_secret: Boolean(process.env.GITHUB_WEBHOOK_SECRET),
+              app_id: Boolean(process.env.GITHUB_APP_ID),
+              private_key: Boolean(process.env.GITHUB_PRIVATE_KEY || process.env.GITHUB_PRIVATE_KEY_B64),
+              oauth_client: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
+              session_secret: Boolean(process.env.SESSION_SECRET),
+              admin_token: Boolean(process.env.ADMIN_TOKEN),
+            };
+            if (pool) {
+              try { await pool.query('SELECT 1'); checks.database = true; } catch {}
+            }
+            return { ok: Object.values(checks).every(Boolean), checks };
+          }
+
+          async function route(req, res) {"""
+
+          if 'async function getReadinessState()' not in text:
+            if route_marker not in text:
+              raise SystemExit('route marker not found')
+            text = text.replace(route_marker, helper, 1)
+
+          old_public = """  if (req.method === 'GET' && url.pathname === '/health/ready') {
+            const checks = {
+              database: false,
+              webhook_secret: Boolean(process.env.GITHUB_WEBHOOK_SECRET),
+              app_id: Boolean(process.env.GITHUB_APP_ID),
+              private_key: Boolean(process.env.GITHUB_PRIVATE_KEY || process.env.GITHUB_PRIVATE_KEY_B64),
+              oauth_client: Boolean(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
+              session_secret: Boolean(process.env.SESSION_SECRET),
+            };
+            if (pool) {
+              try { await pool.query('SELECT 1'); checks.database = true; } catch {}
+            }
+            const ok = Object.values(checks).every(Boolean);
+            return json(res, ok ? 200 : 503, { ok, checks });
+          }"""
+
+          new_public = """  if (req.method === 'GET' && url.pathname === '/health/ready') {
+            const { ok } = await getReadinessState();
+            return json(res, ok ? 200 : 503, { ok });
+          }"""
+
+          if old_public in text:
+            text = text.replace(old_public, new_public, 1)
+          elif new_public not in text:
+            raise SystemExit('public readiness block did not match')
+
+          admin_marker = """  if (req.method === 'GET' && url.pathname === '/admin/jobs') {"""
+          admin_ready = """  if (req.method === 'GET' && url.pathname === '/admin/health/ready') {
+            if (!requireAdmin(req)) return json(res, 401, { error: 'Unauthorized' });
+            const { ok, checks } = await getReadinessState();
+            return json(res, ok ? 200 : 503, { ok, checks, checked_at: new Date().toISOString() });
+          }
+
+            if (req.method === 'GET' && url.pathname === '/admin/jobs') {"""
+
+          if "url.pathname === '/admin/health/ready'" not in text:
+            if admin_marker not in text:
+              raise SystemExit('admin route marker not found')
+            text = text.replace(admin_marker, admin_ready, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Remove one-shot workflow and commit only the readiness patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git rm .github/workflows/apply-marketplace-readiness-hardening-once.yml
+          git add github-app/src/server.js
+          git diff --cached --check
+          git config user.name 'richo-systems-ci'
+          git config user.email 'actions@users.noreply.github.com'
+          git commit -m 'Harden Marketplace readiness diagnostics'
+          git push origin HEAD:agent/integrate-commerce-marketplace
