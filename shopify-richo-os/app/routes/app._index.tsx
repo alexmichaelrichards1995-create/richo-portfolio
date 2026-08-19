@@ -7,6 +7,8 @@ import { attachExecutionEnvelope, decideAction, getAction, listActions, persistP
 import { rankProducts } from "../lib/product-intelligence.server";
 import { fetchProductState, hashProductState, rollbackSnapshot } from "../lib/product-state.server";
 import { executeApprovedProductUpdate } from "../lib/shopify-product-executor.server";
+import { rollbackExecutedProductUpdate } from "../lib/shopify-product-rollback.server";
+import { markExperimentRolledBack } from "../lib/experiment-ledger.server";
 
 function numberCell(row: unknown[], index: number) {
   const value = Number(row[index] ?? 0);
@@ -41,6 +43,17 @@ export async function action({ request }: ActionFunctionArgs) {
       idempotencyKey: `richo:${actionId}:${row.expectedStateHash}`,
       adminGraphql: admin.graphql,
     });
+    return { ok: true, intent };
+  }
+
+  if (intent === "rollback") {
+    await rollbackExecutedProductUpdate({
+      shopDomain: session.shop,
+      actionId,
+      actorId: session.id,
+      adminGraphql: admin.graphql,
+    });
+    await markExperimentRolledBack({ shopDomain: session.shop, actionId });
     return { ok: true, intent };
   }
 
@@ -140,16 +153,16 @@ export default function RichoOperationsHome() {
   const { snapshot, decision, approvalQueue, productIntelligence, analyticsErrors } = useLoaderData<typeof loader>();
   const auditCount = approvalQueue.reduce((sum, action) => sum + action.auditEvents.length, 0);
   return <main style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "system-ui" }}>
-    <header><p style={{opacity:.65}}>R.I.C.H.O. Systems · Shopify Operations OS</p><h1>Mission Control</h1><p>Observe → reason → propose → approve → execute → verify. Sensitive actions never bypass human approval.</p></header>
+    <header><p style={{opacity:.65}}>R.I.C.H.O. Systems · Shopify Operations OS</p><h1>Mission Control</h1><p>Observe → reason → propose → approve → execute → verify → rollback when required.</p></header>
     {analyticsErrors.length > 0 && <section style={{border:"1px solid #d8a600",padding:14,borderRadius:10}}><strong>Analytics warning</strong><p>{analyticsErrors.join(" · ")}</p></section>}
     <section style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:12,marginTop:20}}>
       <Metric label="Operating score" value={`${decision.operatingScore}/100`}/><Metric label="30d sessions" value={snapshot.sessions}/><Metric label="Add-to-cart" value={`${decision.addToCartRate.toFixed(2)}%`}/><Metric label="Checkout" value={`${decision.checkoutRate.toFixed(2)}%`}/><Metric label="Conversion" value={`${decision.conversionRate.toFixed(2)}%`}/><Metric label="Revenue" value={`A$${snapshot.revenue.toFixed(2)}`}/>
     </section>
     <section style={{marginTop:28}}><h2>Product Intelligence</h2><div style={{display:"grid",gap:8}}>{productIntelligence.map(p=><article key={p.id} style={{border:"1px solid #e5e5e5",borderRadius:10,padding:14}}><strong>{p.title} · {p.score}/100</strong><p>{p.issues.length ? p.issues.join(" · ") : "No structural issues detected."}</p><small>{p.recommendation}</small></article>)}</div></section>
     <section style={{marginTop:28}}><h2>AI Operations Agents</h2><p>Conversion · Catalog · Revenue · Customer · Governance</p></section>
-    <section style={{marginTop:28}}><h2>Approval Queue</h2><div style={{display:"grid",gap:10}}>{approvalQueue.map(a=><article key={a.id} style={{border:"1px solid #ddd",borderRadius:10,padding:16}}><strong>{a.title}</strong><p>{a.evidence}</p><p>{a.recommendation}</p><small>Agent: {a.agent} · Risk: {a.risk} · Status: {a.status}</small>{a.status === "proposed" && <Form method="post" style={{display:"flex",gap:8,marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button type="submit" name="intent" value="approved">Approve</button><button type="submit" name="intent" value="rejected">Reject</button></Form>}{a.status === "approved" && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button type="submit" name="intent" value="execute">Execute Approved Change</button></Form>}</article>)}</div></section>
+    <section style={{marginTop:28}}><h2>Approval Queue</h2><div style={{display:"grid",gap:10}}>{approvalQueue.map(a=>{const rolledBack=a.auditEvents.some(e=>e.event==="ROLLED_BACK");return <article key={a.id} style={{border:"1px solid #ddd",borderRadius:10,padding:16}}><strong>{a.title}</strong><p>{a.evidence}</p><p>{a.recommendation}</p><small>Agent: {a.agent} · Risk: {a.risk} · Status: {rolledBack ? "rolled back" : a.status}</small>{a.status === "proposed" && <Form method="post" style={{display:"flex",gap:8,marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button type="submit" name="intent" value="approved">Approve</button><button type="submit" name="intent" value="rejected">Reject</button></Form>}{a.status === "approved" && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button type="submit" name="intent" value="execute">Execute Approved Change</button></Form>}{a.status === "executed" && !rolledBack && a.reversible && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button type="submit" name="intent" value="rollback">Rollback Executed Change</button></Form>}</article>})}</div></section>
     <section style={{marginTop:28}}><h2>Audit Ledger</h2><p>{auditCount} persisted audit event(s) across the current operating queue.</p></section>
-    <section style={{marginTop:28}}><h2>Conversion Lab</h2><p>Current funnel: {snapshot.sessions} sessions → {snapshot.addToCarts} carts → {snapshot.checkouts} checkouts → {snapshot.purchases} purchases.</p></section>
+    <section style={{marginTop:28}}><h2>Conversion Lab</h2><p>Current funnel: {snapshot.sessions} sessions → {snapshot.addToCarts} carts → {snapshot.checkouts} checkouts → {snapshot.purchases} purchases.</p><p>Experiment persistence is installed; before/after attribution is the next measurement connection.</p></section>
   </main>;
 }
 function Metric({label,value}:{label:string;value:string|number}){return <article style={{border:"1px solid #e3e3e3",borderRadius:12,padding:16}}><div style={{opacity:.65,fontSize:13}}>{label}</div><div style={{fontSize:24,fontWeight:700}}>{value}</div></article>}
