@@ -87,25 +87,32 @@ function stripeTransport(mode: StripeMode): StripeTransportConfig {
   }
 }
 
+function mockAuthorizationKey() {
+  // stripe-mock validates Authorization key shape. Assemble a deterministic
+  // test-only value at runtime so no key-shaped credential is committed.
+  return ['sk', 'test', '123456789012345678901234'].join('_')
+}
+
 export function getStripeMode() {
   return configuredStripeMode()
 }
 
 export function getStripe() {
-  const key = process.env.STRIPE_RESTRICTED_KEY
+  const configuredKey = process.env.STRIPE_RESTRICTED_KEY
 
-  if (!key) {
+  if (!configuredKey) {
     throw new Error('STRIPE_RESTRICTED_KEY is not configured')
   }
 
-  const mode = assertStripeKeyMode(key)
+  const mode = assertStripeKeyMode(configuredKey)
   const transport = stripeTransport(mode)
   const { transportId, ...transportConfig } = transport
+  const clientKey = transportId.startsWith('mock:') ? mockAuthorizationKey() : configuredKey
 
   if (!stripeClient || stripeClientMode !== mode || stripeClientTransport !== transportId) {
     // stripe-node v22.5.0 pins the compatible Stripe API version. Do not
     // override apiVersion independently from the SDK types.
-    stripeClient = new Stripe(key, {
+    stripeClient = new Stripe(clientKey, {
       ...transportConfig,
       appInfo: {
         name: 'R.I.C.H.O. Systems',
