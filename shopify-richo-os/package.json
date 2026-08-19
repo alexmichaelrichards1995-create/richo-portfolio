@@ -9,9 +9,10 @@
     "typecheck": "react-router typegen && tsc --noEmit",
     "validate:control-plane": "node scripts/validate-control-plane.mjs",
     "validate:production": "node scripts/validate-production-readiness.mjs",
+    "validate:security": "node scripts/validate-operational-security.mjs",
     "test:lifecycle": "node scripts/test-experiment-lifecycle.mjs",
     "test:unit": "vitest run",
-    "test": "npm run test:unit && npm run validate:control-plane && npm run validate:production && npm run test:lifecycle"
+    "test": "npm run test:unit && npm run validate:control-plane && npm run validate:production && npm run validate:security && npm run test:lifecycle"
   },
   "engines": {
     "node": ">=20.19 <22 || >=22.12"
