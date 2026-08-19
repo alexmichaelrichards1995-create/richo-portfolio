@@ -4,6 +4,7 @@ import type { ProposedAction } from "./richo-control-plane.server";
 import { fetchProductState, hashProductState } from "./product-state.server";
 import { resilientAdminGraphql } from "./shopify-retry.server";
 import { consumeMutationQuota } from "./operational-security.server";
+import { recordSecurityEvent } from "./security-events.server";
 
 type AdminGraphql = (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
 
@@ -24,6 +25,7 @@ function isAllowedPayload(value: unknown): value is ProductUpdatePayload {
 export async function executeApprovedProductUpdate(args: {
   shopDomain: string;
   actionId: string;
+  actorId: string;
   expectedStateMatches: boolean;
   idempotencyKey: string;
   adminGraphql: AdminGraphql;
@@ -31,6 +33,18 @@ export async function executeApprovedProductUpdate(args: {
   const row = await prisma.richoShopifyAction.findFirst({ where: { id: args.actionId, shopDomain: args.shopDomain }, include: { auditEvents: true } });
   if (!row) throw new Error("RICHO_ACTION_NOT_FOUND");
   if (!isAllowedPayload(row.mutationPayload)) throw new Error("RICHO_MUTATION_NOT_ALLOWLISTED");
+
+  if (row.approvedBy && row.approvedBy === args.actorId) {
+    await recordSecurityEvent({
+      shopDomain: args.shopDomain,
+      event: "SEPARATION_OF_DUTIES_BLOCKED",
+      actorId: args.actorId,
+      targetId: row.id,
+      severity: "warn",
+      payload: { reason: "APPROVER_CANNOT_EXECUTE_SAME_ACTION" },
+    });
+    throw new Response("Approver cannot execute the same action", { status: 403 });
+  }
 
   const action: ProposedAction = {
     id: row.id, agent: row.agent as ProposedAction["agent"], title: row.title, evidence: row.evidence,
@@ -47,7 +61,7 @@ export async function executeApprovedProductUpdate(args: {
     rollbackPayload: row.rollbackPayload,
   });
 
-  await consumeMutationQuota({ shopDomain: args.shopDomain, actorId: row.approvedBy ?? "approved-action" });
+  await consumeMutationQuota(args.shopDomain, args.actorId);
 
   const payload = row.mutationPayload as ProductUpdatePayload;
   const product: Record<string, unknown> = { id: payload.productId };
@@ -86,8 +100,9 @@ export async function executeApprovedProductUpdate(args: {
 
   await prisma.$transaction([
     prisma.richoShopifyAction.update({ where: { id: row.id }, data: { status: "executed", executedAt: new Date() } }),
-    prisma.richoShopifyAuditEvent.create({ data: { actionId: row.id, event: "EXECUTED", actorType: "system", payload: { idempotencyKey: args.idempotencyKey, product: result?.product ?? null, verified: true, verifiedHash } } }),
+    prisma.richoShopifyAuditEvent.create({ data: { actionId: row.id, event: "EXECUTED", actorType: "human", actorId: args.actorId, payload: { idempotencyKey: args.idempotencyKey, product: result?.product ?? null, verified: true, verifiedHash } } }),
   ]);
 
+  await recordSecurityEvent({ shopDomain: args.shopDomain, event: "APPROVED_MUTATION_EXECUTED", actorId: args.actorId, targetId: row.id, payload: { verifiedHash } });
   return { product: result?.product ?? null, verified: true, verifiedHash };
 }
