@@ -3,7 +3,10 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import { evaluateCommerce } from "../lib/richo-engine.server";
 import { proposeActions } from "../lib/richo-control-plane.server";
-import { decideAction, listActions, persistProposals } from "../lib/approval-repository.server";
+import { attachExecutionEnvelope, decideAction, getAction, listActions, persistProposals } from "../lib/approval-repository.server";
+import { rankProducts } from "../lib/product-intelligence.server";
+import { fetchProductState, hashProductState, rollbackSnapshot } from "../lib/product-state.server";
+import { executeApprovedProductUpdate } from "../lib/shopify-product-executor.server";
 
 function numberCell(row: unknown[], index: number) {
   const value = Number(row[index] ?? 0);
@@ -11,27 +14,51 @@ function numberCell(row: unknown[], index: number) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const form = await request.formData();
   const actionId = String(form.get("actionId") ?? "");
-  const decision = String(form.get("decision") ?? "");
-  if (!actionId || (decision !== "approved" && decision !== "rejected")) {
-    throw new Response("Invalid approval request", { status: 400 });
+  const intent = String(form.get("intent") ?? "");
+  if (!actionId) throw new Response("Invalid action request", { status: 400 });
+
+  if (intent === "approved" || intent === "rejected") {
+    await decideAction({ shopDomain: session.shop, actionId, decision: intent, actorId: session.id });
+    return { ok: true, intent };
   }
-  await decideAction({
-    shopDomain: session.shop,
-    actionId,
-    decision,
-    actorId: session.id,
-  });
-  return { ok: true };
+
+  if (intent === "execute") {
+    const row = await getAction(session.shop, actionId);
+    if (!row) throw new Response("Action not found", { status: 404 });
+    const payload = row.mutationPayload as { kind?: string; productId?: string } | null;
+    if (payload?.kind !== "product_update" || !payload.productId || !row.expectedStateHash) {
+      throw new Response("Action has no executable product envelope", { status: 400 });
+    }
+    const currentState = await fetchProductState(admin.graphql, payload.productId);
+    const currentHash = hashProductState(currentState);
+    await executeApprovedProductUpdate({
+      shopDomain: session.shop,
+      actionId,
+      expectedStateMatches: currentHash === row.expectedStateHash,
+      idempotencyKey: `richo:${actionId}:${row.expectedStateHash}`,
+      adminGraphql: admin.graphql,
+    });
+    return { ok: true, intent };
+  }
+
+  throw new Response("Unsupported action intent", { status: 400 });
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { admin, session } = await authenticate.admin(request);
   const response = await admin.graphql(`#graphql
     query RichoOperationsSnapshot {
-      products(first: 100) { nodes { status } }
+      products(first: 100) {
+        nodes {
+          id title descriptionHtml status updatedAt
+          seo { title description }
+          media(first: 10) { nodes { id } }
+          variants(first: 1) { nodes { price } }
+        }
+      }
       collections(first: 100) { nodes { id } }
       customersCount { count }
       ordersCount { count }
@@ -66,15 +93,51 @@ export async function loader({ request }: LoaderFunctionArgs) {
   };
   const decision = evaluateCommerce(snapshot);
   await persistProposals(session.shop, proposeActions(decision.findings));
+
+  const productIntelligence = rankProducts(products.map((p: any) => ({
+    id: p.id,
+    title: p.title,
+    status: p.status,
+    descriptionLength: String(p.descriptionHtml ?? "").replace(/<[^>]*>/g, "").trim().length,
+    mediaCount: p.media?.nodes?.length ?? 0,
+    price: Number(p.variants?.nodes?.[0]?.price ?? 0),
+  })));
+
+  for (const product of products) {
+    const intelligence = productIntelligence.find((item) => item.id === product.id);
+    if (!intelligence || intelligence.score >= 85 || product.seo?.title) continue;
+    const actionId = `action:product-seo:${product.id}`;
+    await persistProposals(session.shop, [{
+      id: actionId,
+      agent: "catalog",
+      title: `Repair SEO title for ${product.title}`,
+      evidence: `Product health score ${intelligence.score}/100; Shopify SEO title is empty.`,
+      recommendation: `Set the SEO title to the verified product title, then re-measure search and product performance.`,
+      risk: "low",
+      reversible: true,
+      requiresHumanApproval: true,
+      status: "proposed",
+      createdAt: new Date().toISOString(),
+    }]);
+    const state = await fetchProductState(admin.graphql, product.id);
+    await attachExecutionEnvelope({
+      shopDomain: session.shop,
+      actionId,
+      expectedStateHash: hashProductState(state),
+      rollbackPayload: rollbackSnapshot(state),
+      mutationPayload: { kind: "product_update", productId: product.id, seo: { title: product.title, description: product.seo?.description ?? undefined } },
+    });
+  }
+
   const approvalQueue = await listActions(session.shop);
   return {
-    snapshot, decision, approvalQueue,
+    snapshot, decision, approvalQueue, productIntelligence,
     analyticsErrors: [...(data.shopifyqlQuery?.parseErrors ?? []), ...(data.sales?.parseErrors ?? [])],
   };
 }
 
 export default function RichoOperationsHome() {
-  const { snapshot, decision, approvalQueue, analyticsErrors } = useLoaderData<typeof loader>();
+  const { snapshot, decision, approvalQueue, productIntelligence, analyticsErrors } = useLoaderData<typeof loader>();
   const auditCount = approvalQueue.reduce((sum, action) => sum + action.auditEvents.length, 0);
   return <main style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "system-ui" }}>
     <header><p style={{opacity:.65}}>R.I.C.H.O. Systems · Shopify Operations OS</p><h1>Mission Control</h1><p>Observe → reason → propose → approve → execute → verify. Sensitive actions never bypass human approval.</p></header>
@@ -82,8 +145,9 @@ export default function RichoOperationsHome() {
     <section style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:12,marginTop:20}}>
       <Metric label="Operating score" value={`${decision.operatingScore}/100`}/><Metric label="30d sessions" value={snapshot.sessions}/><Metric label="Add-to-cart" value={`${decision.addToCartRate.toFixed(2)}%`}/><Metric label="Checkout" value={`${decision.checkoutRate.toFixed(2)}%`}/><Metric label="Conversion" value={`${decision.conversionRate.toFixed(2)}%`}/><Metric label="Revenue" value={`A$${snapshot.revenue.toFixed(2)}`}/>
     </section>
+    <section style={{marginTop:28}}><h2>Product Intelligence</h2><div style={{display:"grid",gap:8}}>{productIntelligence.map(p=><article key={p.id} style={{border:"1px solid #e5e5e5",borderRadius:10,padding:14}}><strong>{p.title} · {p.score}/100</strong><p>{p.issues.length ? p.issues.join(" · ") : "No structural issues detected."}</p><small>{p.recommendation}</small></article>)}</div></section>
     <section style={{marginTop:28}}><h2>AI Operations Agents</h2><p>Conversion · Catalog · Revenue · Customer · Governance</p></section>
-    <section style={{marginTop:28}}><h2>Approval Queue</h2><div style={{display:"grid",gap:10}}>{approvalQueue.map(a=><article key={a.id} style={{border:"1px solid #ddd",borderRadius:10,padding:16}}><strong>{a.title}</strong><p>{a.evidence}</p><p>{a.recommendation}</p><small>Agent: {a.agent} · Risk: {a.risk} · Status: {a.status}</small>{a.status === "proposed" && <Form method="post" style={{display:"flex",gap:8,marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button type="submit" name="decision" value="approved">Approve</button><button type="submit" name="decision" value="rejected">Reject</button></Form>}</article>)}</div></section>
+    <section style={{marginTop:28}}><h2>Approval Queue</h2><div style={{display:"grid",gap:10}}>{approvalQueue.map(a=><article key={a.id} style={{border:"1px solid #ddd",borderRadius:10,padding:16}}><strong>{a.title}</strong><p>{a.evidence}</p><p>{a.recommendation}</p><small>Agent: {a.agent} · Risk: {a.risk} · Status: {a.status}</small>{a.status === "proposed" && <Form method="post" style={{display:"flex",gap:8,marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button type="submit" name="intent" value="approved">Approve</button><button type="submit" name="intent" value="rejected">Reject</button></Form>}{a.status === "approved" && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button type="submit" name="intent" value="execute">Execute Approved Change</button></Form>}</article>)}</div></section>
     <section style={{marginTop:28}}><h2>Audit Ledger</h2><p>{auditCount} persisted audit event(s) across the current operating queue.</p></section>
     <section style={{marginTop:28}}><h2>Conversion Lab</h2><p>Current funnel: {snapshot.sessions} sessions → {snapshot.addToCarts} carts → {snapshot.checkouts} checkouts → {snapshot.purchases} purchases.</p></section>
   </main>;
