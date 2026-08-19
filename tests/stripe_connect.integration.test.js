@@ -1,15 +1,22 @@
-// Integration test for Stripe Connect safety behavior when Stripe is not configured.
+// Integration test for legacy Stripe Connect safety behavior.
 // No network calls or fake connected-account IDs are permitted in this path.
 
 (async () => {
   try {
-    delete process.env.STRIPE_API_KEY;
+    delete process.env.STRIPE_CONNECT_SECRET_KEY;
+    delete process.env.RICHO_MARKETPLACE_CONNECT_ENABLED;
+    delete process.env.RICHO_LIVE_PAYOUTS_ENABLED;
+
     const stripeConnect = require('../stripe_connect');
     const org = { accountId: 12345, login: 'acme', email: 'devnull@example.com' };
 
     const account = await stripeConnect.createConnectAccount(org);
     if (!account || account.connected !== false || account.accountId !== null || account.state !== 'UNCONFIGURED') {
       throw new Error('unconfigured Stripe Connect must return an explicit non-connected state');
+    }
+
+    if (stripeConnect.connectEnabled() !== false || stripeConnect.payoutsEnabled() !== false) {
+      throw new Error('Marketplace Connect and payout gates must default to disabled');
     }
 
     const belowThreshold = await stripeConnect.executePayout('2026-06', 10000, null, {
@@ -27,10 +34,10 @@
       unconfiguredPayout.scheduled !== false ||
       unconfiguredPayout.state !== 'UNCONFIGURED'
     ) {
-      throw new Error('payout must fail closed when Stripe is unconfigured');
+      throw new Error('payout must fail closed when Stripe Connect is unconfigured');
     }
 
-    console.log('OK: Stripe Connect unconfigured path fails closed without fake account IDs or payouts');
+    console.log('OK: Stripe Connect and payouts default to fail-closed states');
     process.exit(0);
   } catch (err) {
     console.error('FAILED', err && err.message);
