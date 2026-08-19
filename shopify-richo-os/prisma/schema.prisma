@@ -69,16 +69,18 @@ model RichoShopifyAuditEvent {
 }
 
 model RichoShopifyExperiment {
-  id         String   @id
-  actionId   String   @unique @map("action_id")
-  shopDomain String   @map("shop_domain")
-  baseline   Json
-  outcome    Json?
-  startedAt  DateTime @default(now()) @map("started_at")
-  measuredAt DateTime? @map("measured_at")
-  status     String   @default("running")
-  action     RichoShopifyAction @relation(fields: [actionId], references: [id], onDelete: Restrict)
+  id              String   @id
+  actionId        String   @unique @map("action_id")
+  shopDomain      String   @map("shop_domain")
+  targetProductId String?  @map("target_product_id")
+  baseline        Json
+  outcome         Json?
+  startedAt       DateTime @default(now()) @map("started_at")
+  measuredAt      DateTime? @map("measured_at")
+  status          String   @default("running")
+  action          RichoShopifyAction @relation(fields: [actionId], references: [id], onDelete: Restrict)
 
   @@index([shopDomain, status, startedAt])
+  @@index([shopDomain, targetProductId, status])
   @@map("richo_shopify_experiments")
 }
