@@ -22,6 +22,7 @@ on:
       - 'stripe_connect.js'
       - 'stripe_integration.js'
       - 'package.json'
+      - 'package-lock.json'
       - '.env.example'
       - 'INTEGRATION_COMMERCE_MARKETPLACE.md'
       - '.github/workflows/integration-reconciliation-ci.yml'
@@ -70,6 +71,14 @@ jobs:
 
       - name: Install root dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Upload generated root lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: root-package-lock
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Start local Supabase with registry retry
         shell: bash
@@ -217,6 +226,14 @@ jobs:
 
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+
+      - name: Upload generated GitHub App lockfile
+        uses: actions/upload-artifact@v4
+        with:
+          name: github-app-package-lock
+          path: github-app/package-lock.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Apply canonical Marketplace migrations
         run: node scripts/migrate.js
