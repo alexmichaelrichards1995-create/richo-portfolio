@@ -124,3 +124,30 @@ test('owner authorization is externally trust-anchored, short-lived and replay r
   assert.match(ownerTests, /attacker-controlled replacement trust root/)
   assert.match(ownerTests, /atomically prevents replay/)
 })
+
+test('staging execution controller remains mock-only, replay-gated and network-incapable', async () => {
+  const controller = await source('github-app/execution/mock-execution-controller.mjs')
+  const adapters = await source('github-app/execution/mock-adapters.mjs')
+  const ledger = await source('github-app/execution/mock-ledger.mjs')
+  const validator = await source('github-app/execution/validate-mock-execution-package.mjs')
+  const docs = await source('github-app/execution/EXECUTION_CONTROLLER.md')
+  const packageJson = JSON.parse(await source('github-app/package.json'))
+  const allCode = `${controller}\n${adapters}\n${ledger}\n${validator}`
+
+  assert.match(docs, /MOCK ONLY \/ NO PROVIDER CALLS \/ NO STAGING MUTATION \/ NO PRODUCTION AUTHORITY/)
+  assert.match(docs, /durable, shared, atomic ledger/i)
+  assert.match(controller, /execution_mode: 'MOCK_ONLY'/)
+  assert.match(controller, /real_execution_authorized: false/)
+  assert.match(controller, /verifyOwnerAuthorization/)
+  assert.match(controller, /claimAuthorization/)
+  assert.match(controller, /compensateCompleted/)
+  assert.match(ledger, /replay detected/i)
+  assert.match(adapters, /kind: 'mock'/)
+  assert.match(packageJson.scripts['execution:validate'], /validate-mock-execution-package/)
+  assert.match(packageJson.scripts.check, /execution\/validate-mock-execution-package\.mjs/)
+
+  assert.doesNotMatch(allCode, /child_process|node:https|node:http|node:net|node:dns|node:tls/)
+  assert.doesNotMatch(allCode, /\bfetch\s*\(|\bcurl\b|\bwget\b/)
+  assert.doesNotMatch(allCode, /api\.render\.com|api\.github\.com|@aws-sdk|@google-cloud/i)
+  assert.doesNotMatch(allCode, /sk_live_|rk_live_|ghp_[A-Za-z0-9]|github_pat_[A-Za-z0-9]/)
+})
