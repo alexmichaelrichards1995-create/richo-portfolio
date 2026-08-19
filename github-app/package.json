@@ -15,7 +15,8 @@
     "rehearsal:validate": "node rehearsal/validate-rehearsal-package.mjs",
     "approval:validate": "node approval/validate-staging-approval-packet.mjs",
     "approval:dry-run": "node approval/generate-staging-dry-run.mjs",
-    "check": "node --check src/server.js && node --check src/hardened-entrypoint.js && node --check rehearsal/collect-staging-evidence.mjs && node --check rehearsal/collect-webhook-job-evidence.mjs && node --check rehearsal/collect-oauth-session-evidence.mjs && node --check approval/generate-staging-dry-run.mjs && node --check approval/validate-staging-approval-packet.mjs && node rehearsal/validate-rehearsal-package.mjs && node approval/validate-staging-approval-packet.mjs && node --test"
+    "approval:verify-owner": "node approval/verify-owner-authorization.mjs",
+    "check": "node --check src/server.js && node --check src/hardened-entrypoint.js && node --check rehearsal/collect-staging-evidence.mjs && node --check rehearsal/collect-webhook-job-evidence.mjs && node --check rehearsal/collect-oauth-session-evidence.mjs && node --check approval/generate-staging-dry-run.mjs && node --check approval/validate-staging-approval-packet.mjs && node --check approval/verify-owner-authorization.mjs && node rehearsal/validate-rehearsal-package.mjs && node approval/validate-staging-approval-packet.mjs && node --test"
   },
   "dependencies": {
     "pg": "8.22.0"
