@@ -3,6 +3,7 @@ import { assertExecutionAllowed } from "./execution-gate.server";
 import type { ProposedAction } from "./richo-control-plane.server";
 import { fetchProductState, hashProductState } from "./product-state.server";
 import { resilientAdminGraphql } from "./shopify-retry.server";
+import { consumeMutationQuota } from "./operational-security.server";
 
 type AdminGraphql = (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
 
@@ -45,6 +46,8 @@ export async function executeApprovedProductUpdate(args: {
     alreadyExecuted: row.auditEvents.some((event) => event.event === "EXECUTED"),
     rollbackPayload: row.rollbackPayload,
   });
+
+  await consumeMutationQuota({ shopDomain: args.shopDomain, actorId: row.approvedBy ?? "approved-action" });
 
   const payload = row.mutationPayload as ProductUpdatePayload;
   const product: Record<string, unknown> = { id: payload.productId };
