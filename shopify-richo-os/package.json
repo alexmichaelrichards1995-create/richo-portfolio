@@ -10,7 +10,8 @@
     "validate:control-plane": "node scripts/validate-control-plane.mjs",
     "validate:production": "node scripts/validate-production-readiness.mjs",
     "test:lifecycle": "node scripts/test-experiment-lifecycle.mjs",
-    "test": "npm run validate:control-plane && npm run validate:production && npm run test:lifecycle"
+    "test:unit": "vitest run",
+    "test": "npm run test:unit && npm run validate:control-plane && npm run validate:production && npm run test:lifecycle"
   },
   "engines": {
     "node": ">=20.19 <22 || >=22.12"
@@ -37,6 +38,7 @@
     "@types/react": "^18.3.25",
     "@types/react-dom": "^18.3.7",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^3.2.4"
   }
 }
