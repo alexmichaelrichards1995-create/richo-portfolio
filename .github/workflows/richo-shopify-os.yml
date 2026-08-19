@@ -13,19 +13,40 @@ on:
       - ".github/workflows/richo-shopify-os.yml"
 
 jobs:
-  control-plane-invariants:
+  standalone-build-and-governance:
     runs-on: ubuntu-latest
+    env:
+      SHOPIFY_API_KEY: ci-test-key
+      SHOPIFY_API_SECRET: ci-test-secret
+      SHOPIFY_APP_URL: https://ci.example.com
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/richo_ci
+      SCOPES: read_products,write_products,read_orders,read_customers,read_reports
+      RICHO_PRODUCTION_APPROVED: "true"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 22.12.0
+          cache: npm
+          cache-dependency-path: shopify-richo-os/package.json
+      - name: Install standalone dependencies
+        working-directory: shopify-richo-os
+        run: npm install --no-audit --no-fund
+      - name: Generate Prisma client
+        working-directory: shopify-richo-os
+        run: npx prisma generate
+      - name: Typecheck standalone app
+        working-directory: shopify-richo-os
+        run: npm run typecheck
+      - name: Build standalone app
+        working-directory: shopify-richo-os
+        run: npm run build
       - name: Validate RICHO governance invariants
         working-directory: shopify-richo-os
-        run: node scripts/validate-control-plane.mjs
+        run: npm run validate:control-plane
       - name: Run RICHO experiment lifecycle tests
         working-directory: shopify-richo-os
-        run: node scripts/test-experiment-lifecycle.mjs
+        run: npm run test:lifecycle
       - name: Validate production readiness controls
         working-directory: shopify-richo-os
-        run: node scripts/validate-production-readiness.mjs
+        run: npm run validate:production
