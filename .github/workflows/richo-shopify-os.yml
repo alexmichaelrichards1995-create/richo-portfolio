@@ -15,6 +15,20 @@ on:
 jobs:
   standalone-build-and-governance:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: richo_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U ci -d richo_ci"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     env:
       SHOPIFY_API_KEY: ci-test-key
       SHOPIFY_API_SECRET: ci-test-secret
@@ -36,6 +50,9 @@ jobs:
       - name: Validate Prisma schema
         working-directory: shopify-richo-os
         run: npx prisma validate
+      - name: Deploy Prisma migrations to ephemeral PostgreSQL
+        working-directory: shopify-richo-os
+        run: npx prisma migrate deploy
       - name: Generate Prisma client
         working-directory: shopify-richo-os
         run: npx prisma generate
