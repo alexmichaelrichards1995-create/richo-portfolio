@@ -21,7 +21,7 @@ const checks = {
     "Cache-Control",
     "503",
   ],
-  "shopify.server.ts": ["assertProductionReadiness"],
+  "app/shopify.server.ts": ["assertProductionReadiness"],
 };
 
 for (const [path, needles] of Object.entries(checks)) {
