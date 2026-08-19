@@ -23,3 +23,6 @@ jobs:
       - name: Validate RICHO governance invariants
         working-directory: shopify-richo-os
         run: node scripts/validate-control-plane.mjs
+      - name: Run RICHO experiment lifecycle tests
+        working-directory: shopify-richo-os
+        run: node scripts/test-experiment-lifecycle.mjs
