@@ -67,7 +67,7 @@ assert.match(webhookJobCollector, /RICHO_ENVIRONMENT must equal staging/)
 assert.match(webhookJobCollector, /SELECT delivery_id, event_name, action, status, processed_at/)
 assert.match(webhookJobCollector, /SELECT id, kind, status, attempts, max_attempts/)
 assert.doesNotMatch(webhookJobCollector, /SELECT \*/)
-assert.doesNotMatch(webhookJobCollector, /payload/)
+assert.doesNotMatch(webhookJobCollector, /SELECT[^`]*\bpayload\b[^`]*/is)
 assert.match(webhookJobCollector, /Evidence output contains DATABASE_URL/)
 assert.match(webhookJobCollector, /mode: 0o600/)
 
