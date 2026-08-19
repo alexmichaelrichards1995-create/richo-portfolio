@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import prisma from "../db.server";
 import type { ProposedAction } from "./richo-control-plane.server";
 
@@ -38,8 +39,8 @@ export async function attachExecutionEnvelope(args: {
   shopDomain: string;
   actionId: string;
   expectedStateHash: string;
-  rollbackPayload: Record<string, unknown>;
-  mutationPayload: Record<string, unknown>;
+  rollbackPayload: Prisma.InputJsonValue;
+  mutationPayload: Prisma.InputJsonValue;
 }) {
   const action = await prisma.richoShopifyAction.findFirst({
     where: { id: args.actionId, shopDomain: args.shopDomain },
