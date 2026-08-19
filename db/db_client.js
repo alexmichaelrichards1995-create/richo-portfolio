@@ -1,9 +1,9 @@
 /* db_client.js
  * Legacy GitHub Marketplace persistence adapter.
  *
- * This adapter intentionally targets legacy_marketplace_subscriptions so it
- * cannot collide with the canonical github-app Marketplace schema or the
- * Supabase customer subscription domain.
+ * This adapter intentionally targets legacy_marketplace_subscriptions and a
+ * dedicated LEGACY_MARKETPLACE_DATABASE_URL so it cannot accidentally attach
+ * to the Supabase customer-commerce database or the canonical github-app DB.
  */
 
 const fs = require('fs');
@@ -12,8 +12,9 @@ const path = require('path');
 let pgPool = null;
 try {
   const { Pool } = require('pg');
-  if (process.env.PGHOST || process.env.DATABASE_URL) {
-    pgPool = new Pool({ connectionString: process.env.DATABASE_URL || undefined });
+  const connectionString = process.env.LEGACY_MARKETPLACE_DATABASE_URL;
+  if (connectionString) {
+    pgPool = new Pool({ connectionString });
   }
 } catch {
   pgPool = null;
@@ -28,7 +29,9 @@ function fileStoreAllowed() {
 
 function requireFileStoreAllowed() {
   if (!fileStoreAllowed()) {
-    throw new Error('Database is not configured and file-store fallback is disabled');
+    throw new Error(
+      'LEGACY_MARKETPLACE_DATABASE_URL is not configured and file-store fallback is disabled',
+    );
   }
 }
 
