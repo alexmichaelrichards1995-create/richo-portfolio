@@ -42,8 +42,11 @@ jobs:
       - name: Start local Supabase
         run: npx supabase start
 
-      - name: Rebuild database from migrations
+      - name: Rebuild database from migrations and seed data
         run: npx supabase db reset
+
+      - name: Seed private delivery bucket objects
+        run: npx supabase seed buckets
 
       - name: Run pgTAP database tests
         run: npx supabase test db
