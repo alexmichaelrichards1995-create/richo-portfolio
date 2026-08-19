@@ -58,7 +58,7 @@ assert.match(durableSql, /session identity is immutable/)
 assert.match(durableSql, /state IN \('OPEN', 'SUCCEEDED', 'FAILED'\)/)
 
 assert.doesNotMatch(runtimeCode, /node:child_process|child_process|spawn\(|exec\(|execFile\(|fork\(/)
-assert.doesNotMatch(runtimeCode, /node:https|node:http|node:dns|node:tls/)
+assert.doesNotMatch(runtimeCode, /node:https|node:http|node:net|node:dns|node:tls/)
 assert.doesNotMatch(runtimeCode, /\bfetch\s*\(|\bcurl\b|\bwget\b/)
 assert.doesNotMatch(runtimeCode, /api\.render\.com|api\.github\.com|railway\.app|fly\.io\/api/i)
 assert.doesNotMatch(runtimeCode, /@aws-sdk|@google-cloud|azure-sdk|render-sdk|railway-sdk|flyctl/i)
