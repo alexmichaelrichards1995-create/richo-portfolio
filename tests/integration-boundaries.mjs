@@ -10,20 +10,24 @@ const [
   customerWebhook,
   customerDashboard,
   legacyDb,
+  legacyMigrations,
   legacyWebhook,
   legacyConnect,
   canonicalMarketplace,
   canonicalMigration,
+  canonicalEnv,
   envExample,
   packageJson,
 ] = await Promise.all([
   source('app/api/webhooks/stripe/route.ts'),
   source('app/protected/page.tsx'),
   source('db/db_client.js'),
+  source('scripts/run_migrations.sh'),
   source('marketplace_webhook_handler.js'),
   source('stripe_connect.js'),
   source('github-app/src/server.js'),
   source('github-app/sql/002_namespace_marketplace_subscriptions.sql'),
+  source('github-app/.env.example'),
   source('.env.example'),
   source('package.json'),
 ])
@@ -40,13 +44,17 @@ test('canonical GitHub App owns only the canonical Marketplace namespace', () =>
   assert.match(canonicalMigration, /RENAME TO marketplace_subscriptions/)
   assert.doesNotMatch(canonicalMarketplace, /customer_subscriptions/)
   assert.doesNotMatch(canonicalMarketplace, /legacy_marketplace_subscriptions/)
+  assert.match(canonicalEnv, /dedicated service-local PostgreSQL database|must not be/)
+  assert.match(canonicalEnv, /DATABASE_URL=/)
 })
 
-test('legacy compatibility storage cannot attach through generic DATABASE_URL', () => {
+test('legacy compatibility storage and migration runner reject generic DATABASE_URL', () => {
   assert.match(legacyDb, /LEGACY_MARKETPLACE_DATABASE_URL/)
   assert.match(legacyDb, /legacy_marketplace_subscriptions/)
   assert.doesNotMatch(legacyDb, /process\.env\.DATABASE_URL/)
   assert.doesNotMatch(legacyDb, /process\.env\.PGHOST/)
+  assert.match(legacyMigrations, /LEGACY_MARKETPLACE_DATABASE_URL/)
+  assert.doesNotMatch(legacyMigrations, /\$\{DATABASE_URL/)
 })
 
 test('legacy webhook fails closed and has no known fallback secret', () => {
