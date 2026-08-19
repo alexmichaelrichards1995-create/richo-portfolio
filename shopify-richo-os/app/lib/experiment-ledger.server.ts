@@ -10,33 +10,37 @@ export type ExperimentMetrics = {
 };
 
 export async function startExperiment(args: { shopDomain: string; actionId: string; baseline: ExperimentMetrics }) {
-  return prisma.$executeRawUnsafe(
-    `INSERT INTO richo_shopify_experiments (id, action_id, shop_domain, baseline)
-     VALUES ($1, $2, $3, $4::jsonb)
-     ON CONFLICT (action_id) DO NOTHING`,
-    `experiment:${args.actionId}`,
-    args.actionId,
-    args.shopDomain,
-    JSON.stringify(args.baseline),
-  );
+  return prisma.richoShopifyExperiment.upsert({
+    where: { actionId: args.actionId },
+    update: {},
+    create: {
+      id: `experiment:${args.actionId}`,
+      actionId: args.actionId,
+      shopDomain: args.shopDomain,
+      baseline: args.baseline,
+      status: "running",
+    },
+  });
 }
 
 export async function measureExperiment(args: { shopDomain: string; actionId: string; outcome: ExperimentMetrics }) {
-  return prisma.$executeRawUnsafe(
-    `UPDATE richo_shopify_experiments
-     SET outcome = $1::jsonb, measured_at = now(), status = 'measured'
-     WHERE action_id = $2 AND shop_domain = $3 AND status = 'running'`,
-    JSON.stringify(args.outcome),
-    args.actionId,
-    args.shopDomain,
-  );
+  const experiment = await prisma.richoShopifyExperiment.findFirst({
+    where: { actionId: args.actionId, shopDomain: args.shopDomain, status: "running" },
+  });
+  if (!experiment) return null;
+  return prisma.richoShopifyExperiment.update({
+    where: { id: experiment.id },
+    data: { outcome: args.outcome, measuredAt: new Date(), status: "measured" },
+  });
 }
 
 export async function markExperimentRolledBack(args: { shopDomain: string; actionId: string }) {
-  return prisma.$executeRawUnsafe(
-    `UPDATE richo_shopify_experiments SET status = 'rolled_back', measured_at = now()
-     WHERE action_id = $1 AND shop_domain = $2`,
-    args.actionId,
-    args.shopDomain,
-  );
+  const experiment = await prisma.richoShopifyExperiment.findFirst({
+    where: { actionId: args.actionId, shopDomain: args.shopDomain },
+  });
+  if (!experiment) return null;
+  return prisma.richoShopifyExperiment.update({
+    where: { id: experiment.id },
+    data: { status: "rolled_back", measuredAt: new Date() },
+  });
 }
