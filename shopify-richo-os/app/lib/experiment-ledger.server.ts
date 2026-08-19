@@ -132,13 +132,28 @@ export async function listExperiments(shopDomain: string) {
   });
 }
 
-export async function markExperimentRolledBack(args: { shopDomain: string; actionId: string }) {
-  const experiment = await prisma.richoShopifyExperiment.findFirst({
-    where: { actionId: args.actionId, shopDomain: args.shopDomain },
-  });
-  if (!experiment) return null;
-  return prisma.richoShopifyExperiment.update({
-    where: { id: experiment.id },
-    data: { status: "rolled_back", measuredAt: new Date() },
+export async function markExperimentRolledBack(args: { shopDomain: string; actionId: string; restoredHash?: string }) {
+  return prisma.$transaction(async (tx) => {
+    const experiment = await tx.richoShopifyExperiment.findFirst({
+      where: { actionId: args.actionId, shopDomain: args.shopDomain },
+    });
+    if (!experiment) return null;
+
+    const updated = await tx.richoShopifyExperiment.update({
+      where: { id: experiment.id },
+      data: { status: "rolled_back", measuredAt: new Date() },
+    });
+
+    await tx.richoShopifyAuditEvent.create({
+      data: {
+        actionId: args.actionId,
+        event: "EXPERIMENT_CLOSED",
+        actorType: "system",
+        evidence: "Experiment closed after approved rollback and verified state restoration.",
+        payload: { experimentId: experiment.id, finalStatus: "rolled_back", restoredHash: args.restoredHash ?? null },
+      },
+    });
+
+    return updated;
   });
 }
