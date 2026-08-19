@@ -5,14 +5,27 @@ const REQUIRED_LEDGER_METHODS = Object.freeze([
   'appendReceipt',
   'listReceipts',
   'closeSession',
+  'sessionState',
 ])
 
-export function assertMockLedgerAdapter(ledger) {
+const ALLOWED_LEDGER_KINDS = new Set(['mock', 'local-ci-postgres'])
+
+export function assertExecutionLedgerAdapter(ledger) {
   assert.ok(ledger && typeof ledger === 'object', 'ledger adapter is required')
-  assert.equal(ledger.kind, 'mock', 'Execution controller accepts mock ledger adapters only')
+  assert.ok(ALLOWED_LEDGER_KINDS.has(ledger.kind), 'Execution controller accepts mock or local-CI PostgreSQL ledgers only')
   for (const method of REQUIRED_LEDGER_METHODS) {
     assert.equal(typeof ledger[method], 'function', `ledger.${method} must be a function`)
   }
+  if (ledger.kind === 'local-ci-postgres') {
+    assert.equal(ledger.execution_scope, 'local-ci-only', 'PostgreSQL execution ledger must be restricted to local/CI scope')
+    assert.equal(typeof ledger.verifyReceiptChain, 'function', 'local-CI PostgreSQL ledger must expose receipt-chain verification')
+  }
+  return ledger
+}
+
+export function assertMockLedgerAdapter(ledger) {
+  assertExecutionLedgerAdapter(ledger)
+  assert.equal(ledger.kind, 'mock', 'Mock ledger assertion requires kind=mock')
   return ledger
 }
 
