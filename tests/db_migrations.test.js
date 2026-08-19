@@ -1,10 +1,15 @@
 // Verify root legacy Marketplace migrations applied without claiming the generic
-// subscriptions namespace.
+// subscriptions namespace or accepting a generic application database URL.
 
 const { Client } = require('pg');
 
 (async () => {
-  const connection = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/postgres';
+  const connection = process.env.LEGACY_MARKETPLACE_DATABASE_URL;
+  if (!connection) {
+    console.error('FAILED LEGACY_MARKETPLACE_DATABASE_URL is required');
+    process.exit(1);
+  }
+
   const c = new Client({ connectionString: connection });
   try {
     await c.connect();
