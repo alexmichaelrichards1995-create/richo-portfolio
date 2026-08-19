@@ -33,6 +33,9 @@ jobs:
       - name: Generate Prisma client
         working-directory: shopify-richo-os
         run: npx prisma generate
+      - name: Run executable unit tests
+        working-directory: shopify-richo-os
+        run: npm run test:unit
       - name: Typecheck standalone app
         working-directory: shopify-richo-os
         run: npm run typecheck
