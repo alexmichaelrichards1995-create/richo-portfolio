@@ -13,7 +13,7 @@
     "test:billing": "node --test tests/billing-security-contract.mjs tests/storage-security-contract.mjs",
     "test:stripe-mock": "node --test tests/stripe-mock-integration.mjs",
     "test:integration-boundaries": "node --test tests/integration-boundaries.mjs",
-    "test:preproduction": "node --test tests/preproduction-readiness-contract.mjs",
+    "test:preproduction": "node --test tests/preproduction-readiness-contract.mjs tests/github-app-hosting-contract.mjs",
     "test:legacy-marketplace": "node tests/db_migrations.test.js && node tests/marketplace_webhook_handler.test.js && node tests/marketplace_webhook_handler.idempotency.test.js && node tests/webhook_signature.integration.test.js && node tests/stripe_integration.test.js && node tests/stripe_connect.integration.test.js",
     "test:github-app": "npm --prefix github-app test",
     "db:start": "supabase start",
