@@ -132,7 +132,7 @@ test('staging execution controller remains mock-only, replay-gated and network-i
   const validator = await source('github-app/execution/validate-mock-execution-package.mjs')
   const docs = await source('github-app/execution/EXECUTION_CONTROLLER.md')
   const packageJson = JSON.parse(await source('github-app/package.json'))
-  const allCode = `${controller}\n${adapters}\n${ledger}\n${validator}`
+  const runtimeCode = `${controller}\n${adapters}\n${ledger}`
 
   assert.match(docs, /MOCK ONLY \/ NO PROVIDER CALLS \/ NO STAGING MUTATION \/ NO PRODUCTION AUTHORITY/)
   assert.match(docs, /durable, shared, atomic ledger/i)
@@ -145,9 +145,11 @@ test('staging execution controller remains mock-only, replay-gated and network-i
   assert.match(adapters, /kind: 'mock'/)
   assert.match(packageJson.scripts['execution:validate'], /validate-mock-execution-package/)
   assert.match(packageJson.scripts.check, /execution\/validate-mock-execution-package\.mjs/)
+  assert.match(validator, /node:https\|node:http\|node:net\|node:dns\|node:tls/)
+  assert.match(validator, /api\\\.render\\\.com\|api\\\.github\\\.com/)
 
-  assert.doesNotMatch(allCode, /child_process|node:https|node:http|node:net|node:dns|node:tls/)
-  assert.doesNotMatch(allCode, /\bfetch\s*\(|\bcurl\b|\bwget\b/)
-  assert.doesNotMatch(allCode, /api\.render\.com|api\.github\.com|@aws-sdk|@google-cloud/i)
-  assert.doesNotMatch(allCode, /sk_live_|rk_live_|ghp_[A-Za-z0-9]|github_pat_[A-Za-z0-9]/)
+  assert.doesNotMatch(runtimeCode, /child_process|node:https|node:http|node:net|node:dns|node:tls/)
+  assert.doesNotMatch(runtimeCode, /\bfetch\s*\(|\bcurl\b|\bwget\b/)
+  assert.doesNotMatch(runtimeCode, /api\.render\.com|api\.github\.com|@aws-sdk|@google-cloud/i)
+  assert.doesNotMatch(runtimeCode, /sk_live_|rk_live_|ghp_[A-Za-z0-9]|github_pat_[A-Za-z0-9]/)
 })
