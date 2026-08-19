@@ -21,15 +21,32 @@ const mustContain = {
     "RICHO_EXPERIMENT_COLLISION",
     "confidenceFor",
     "recommendationFor",
-    "collect_more_data",
-    "rollback",
+    "EXPERIMENT_MEASURED",
+    "ROLLBACK_RECOMMENDED",
+    "EXPERIMENT_CLOSED",
   ],
   "app/lib/product-experiment-metrics.server.ts": [
     "landing_page_path",
     "product_title",
     "RICHO_PRODUCT_ATTRIBUTION_QUERY_FAILED",
   ],
-  "app/lib/shopify-product-rollback.server.ts": ["ROLLED_BACK"],
+  "app/lib/rollback-review.server.ts": [
+    "ROLLBACK_RECOMMENDED",
+    "ROLLBACK_APPROVED",
+    "ROLLBACK_REJECTED",
+    "RICHO_ROLLBACK_ALREADY_DECIDED",
+  ],
+  "app/lib/shopify-product-rollback.server.ts": [
+    "RICHO_ROLLBACK_REQUIRES_HUMAN_APPROVAL",
+    "ROLLBACK_VERIFICATION_FAILED",
+    "ROLLBACK_VERIFIED",
+    "ROLLED_BACK",
+  ],
+  "app/routes/app._index.tsx": [
+    "Approve Recommended Rollback",
+    "Reject Rollback",
+    "Execute Approved Rollback",
+  ],
 };
 
 for (const [path, needles] of Object.entries(mustContain)) {
@@ -39,4 +56,4 @@ for (const [path, needles] of Object.entries(mustContain)) {
   }
 }
 
-console.log("RICHO Shopify control-plane and experiment lifecycle invariants validated.");
+console.log("RICHO Shopify control-plane, experiment, and governed rollback lifecycle invariants validated.");
