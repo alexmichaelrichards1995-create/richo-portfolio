@@ -32,12 +32,42 @@ model RichoShopControl {
   deploymentState     String   @default("BLOCKED") @map("deployment_state")
   deploymentApproved  Boolean  @default(false) @map("deployment_approved")
   sessionsRevokedAt   DateTime? @map("sessions_revoked_at")
-  lastScopeSyncAt      DateTime? @map("last_scope_sync_at")
-  lastWebhookAt        DateTime? @map("last_webhook_at")
-  createdAt            DateTime @default(now()) @map("created_at")
-  updatedAt            DateTime @default(now()) @updatedAt @map("updated_at")
+  lastScopeSyncAt     DateTime? @map("last_scope_sync_at")
+  lastWebhookAt       DateTime? @map("last_webhook_at")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @default(now()) @updatedAt @map("updated_at")
 
   @@map("richo_shop_controls")
+}
+
+model RichoShopOperator {
+  id             String   @id @default(cuid())
+  shopDomain     String   @map("shop_domain")
+  sessionId      String   @map("session_id")
+  canApprove     Boolean  @default(false) @map("can_approve")
+  canExecute     Boolean  @default(false) @map("can_execute")
+  canRollback    Boolean  @default(false) @map("can_rollback")
+  canAdminister  Boolean  @default(false) @map("can_administer")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([shopDomain, sessionId])
+  @@index([shopDomain, active])
+  @@map("richo_shop_operators")
+}
+
+model RichoMutationWindow {
+  id          String   @id @default(cuid())
+  shopDomain  String   @map("shop_domain")
+  actorId     String   @map("actor_id")
+  windowStart DateTime @map("window_start")
+  count       Int      @default(0)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@unique([shopDomain, actorId, windowStart])
+  @@index([shopDomain, windowStart])
+  @@map("richo_mutation_windows")
 }
 
 model RichoWebhookReceipt {
