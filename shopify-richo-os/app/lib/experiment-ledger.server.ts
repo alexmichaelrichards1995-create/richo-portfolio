@@ -1,4 +1,5 @@
 import prisma from "../db.server";
+import { compareExperimentStatistically } from "./experiment-statistics.server";
 
 export type ExperimentMetrics = {
   sessions: number;
@@ -69,9 +70,42 @@ export async function measureExperiment(args: { shopDomain: string; actionId: st
     where: { actionId: args.actionId, shopDomain: args.shopDomain, status: "running" },
   });
   if (!experiment) return null;
-  return prisma.richoShopifyExperiment.update({
-    where: { id: experiment.id },
-    data: { outcome: args.outcome, measuredAt: new Date(), status: "measured" },
+
+  const baseline = experiment.baseline as ExperimentMetrics;
+  const impact = classifyImpact(baseline, args.outcome);
+  const confidence = confidenceFor(baseline, args.outcome);
+  const recommendation = recommendationFor(impact, confidence);
+  const statistics = compareExperimentStatistically(baseline, args.outcome);
+
+  return prisma.$transaction(async (tx) => {
+    const measured = await tx.richoShopifyExperiment.update({
+      where: { id: experiment.id },
+      data: { outcome: args.outcome, measuredAt: new Date(), status: "measured" },
+    });
+
+    await tx.richoShopifyAuditEvent.create({
+      data: {
+        actionId: args.actionId,
+        event: "EXPERIMENT_MEASURED",
+        actorType: "system",
+        evidence: `Experiment measured: ${impact}; confidence ${confidence}; recommendation ${recommendation}.`,
+        payload: { baseline, outcome: args.outcome, impact, confidence, recommendation, statistics },
+      },
+    });
+
+    if (recommendation === "rollback") {
+      await tx.richoShopifyAuditEvent.create({
+        data: {
+          actionId: args.actionId,
+          event: "ROLLBACK_RECOMMENDED",
+          actorType: "system",
+          evidence: `Measured performance regressed with ${confidence} confidence. Human rollback review required.`,
+          payload: { impact, confidence, statistics },
+        },
+      });
+    }
+
+    return measured;
   });
 }
 
@@ -85,12 +119,14 @@ export async function listExperiments(shopDomain: string) {
     const outcome = row.outcome as ExperimentMetrics | null;
     const impact = outcome ? classifyImpact(baseline, outcome) : null;
     const confidence = outcome ? confidenceFor(baseline, outcome) : null;
+    const statistics = outcome ? compareExperimentStatistically(baseline, outcome) : null;
     return {
       ...row,
       baseline,
       outcome,
       impact,
       confidence,
+      statistics,
       recommendation: impact && confidence ? recommendationFor(impact, confidence) : null,
     };
   });
