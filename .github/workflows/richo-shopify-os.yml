@@ -1,0 +1,25 @@
+name: RICHO Shopify OS
+
+on:
+  pull_request:
+    paths:
+      - "shopify-richo-os/**"
+      - ".github/workflows/richo-shopify-os.yml"
+  push:
+    branches:
+      - "feat/richo-shopify-operations-os"
+    paths:
+      - "shopify-richo-os/**"
+      - ".github/workflows/richo-shopify-os.yml"
+
+jobs:
+  control-plane-invariants:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate RICHO governance invariants
+        working-directory: shopify-richo-os
+        run: node scripts/validate-control-plane.mjs
