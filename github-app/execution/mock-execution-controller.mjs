@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { KNOWN_MUTATING_ACTIONS, verifyOwnerAuthorization } from '../approval/verify-owner-authorization.mjs'
-import { assertMockExecutionAdapters, assertMockLedgerAdapter } from './ledger-contract.mjs'
+import { assertExecutionLedgerAdapter, assertMockExecutionAdapters } from './ledger-contract.mjs'
 import { MOCK_ACTION_ROUTING } from './mock-adapters.mjs'
 
 const ACTION_ORDER = Object.freeze([...KNOWN_MUTATING_ACTIONS])
@@ -49,7 +49,7 @@ function createReceipt({ session, actionId, adapterName, state, summary, timesta
 }
 
 export function createMockExecutionController({ ledger, adapters, clock = () => new Date() }) {
-  assertMockLedgerAdapter(ledger)
+  assertExecutionLedgerAdapter(ledger)
   assertMockExecutionAdapters(adapters)
   assert.equal(typeof clock, 'function', 'clock must be a function')
 
@@ -93,6 +93,7 @@ export function createMockExecutionController({ ledger, adapters, clock = () => 
       schema_version: 1,
       execution_mode: 'MOCK_ONLY',
       real_execution_authorized: false,
+      ledger_kind: ledger.kind,
       state: 'OPEN',
       authorization_id: verification.authorization_id,
       source_sha: verification.source_sha,
@@ -189,17 +190,18 @@ export function createMockExecutionController({ ledger, adapters, clock = () => 
       const actionReceipts = []
       for (const actionId of session.requested_actions) actionReceipts.push(await dispatch(session, actionId))
       session.state = 'SUCCEEDED'
-      await ledger.closeSession(session.authorization_id, 'SUCCEEDED')
+      await ledger.closeSession(session.authorization_id, 'SUCCEEDED', clock())
       return Object.freeze({
         state: 'SUCCEEDED',
         execution_mode: 'MOCK_ONLY',
+        ledger_kind: ledger.kind,
         action_receipts: actionReceipts,
         compensation_receipts: [],
       })
     } catch (error) {
       const compensationReceipts = await compensateCompleted(session)
       session.state = 'FAILED'
-      await ledger.closeSession(session.authorization_id, 'FAILED')
+      await ledger.closeSession(session.authorization_id, 'FAILED', clock())
       const wrapped = new Error(`MOCK_EXECUTION_FAILED: ${error.message}`)
       wrapped.cause = error
       wrapped.compensation_receipts = compensationReceipts
