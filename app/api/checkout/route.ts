@@ -109,6 +109,7 @@ export async function POST(request: NextRequest) {
 
   const storageBucket = metadataString(product.metadata, 'storage_bucket')
   const storagePath = metadataString(product.metadata, 'storage_path')
+  const deliveryAssetKind = metadataString(product.metadata, 'delivery_asset_kind')
   if (product.delivery_mode === 'download' && (!storageBucket || !storagePath)) {
     return NextResponse.json(
       { error: 'Download product is not configured for secure delivery' },
@@ -130,6 +131,7 @@ export async function POST(request: NextRequest) {
       ? {
           storage_bucket: storageBucket,
           storage_path: storagePath,
+          ...(deliveryAssetKind ? { delivery_asset_kind: deliveryAssetKind } : {}),
         }
       : {}),
   }
