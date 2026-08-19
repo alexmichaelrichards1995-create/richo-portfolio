@@ -26,7 +26,6 @@ allowed_mime_types = [
   "application/pdf",
   "application/zip",
   "application/octet-stream",
-  "text/markdown",
-  "text/plain"
+  "text/*"
 ]
 objects_path = "./richo-digital-deliveries"
