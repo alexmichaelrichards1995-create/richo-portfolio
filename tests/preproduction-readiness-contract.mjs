@@ -73,3 +73,32 @@ test('release runbook keeps infrastructure, rollback, money and owner gates expl
   assert.match(runbook, /Payout gate separately approved/)
   assert.match(runbook, /status remains \*\*NO-GO \/ PRE-PRODUCTION\*\*/)
 })
+
+test('staging activation approval packet is inert, exact-source gated and zero-spend by default', async () => {
+  const plan = JSON.parse(await source('github-app/approval/staging-activation-plan.json.example'))
+  const packet = await source('github-app/approval/STAGING_EXECUTION_APPROVAL_PACKET.md')
+  const generator = await source('github-app/approval/generate-staging-dry-run.mjs')
+
+  assert.equal(plan.status, 'TEMPLATE_ONLY_NO_EXECUTION')
+  assert.equal(plan.environment, 'staging')
+  assert.equal(plan.provider.resource_creation_approved, false)
+  assert.equal(plan.provider.spend_approved, false)
+  assert.equal(plan.provider.spend_cap_aud, 0)
+  assert.equal(plan.provider.production_use_approved, false)
+  assert.equal(plan.source.approved_source_sha, '__SET_AFTER_FINAL_CI__')
+  assert.equal(plan.source.approved_image_digest, '__SET_AFTER_FINAL_CI__')
+  assert.equal(plan.source.invalidate_approval_on_source_change, true)
+  assert.equal(plan.execution_sequence.length, 16)
+  assert.ok(plan.execution_sequence.filter((step) => step.mutating).every((step) => Boolean(step.gate)))
+  assert.ok(Object.values(plan.owner_gates).every((value) => value === false))
+  assert.ok(Object.values(plan.hard_stops).every((value) => value === true))
+
+  assert.match(packet, /NO EXECUTION AUTHORITY/)
+  assert.match(packet, /Any source change after approval invalidates the source\/image approval/i)
+  assert.match(packet, /A\$0/)
+  assert.match(packet, /Production promotion: \*\*NOT APPROVED BY THIS PACKET\*\*/)
+
+  assert.match(generator, /DRY-RUN ONLY/)
+  assert.match(generator, /NO COMMANDS WILL BE EXECUTED/)
+  assert.doesNotMatch(generator, /child_process|node:https|node:http|\bfetch\s*\(/)
+})
