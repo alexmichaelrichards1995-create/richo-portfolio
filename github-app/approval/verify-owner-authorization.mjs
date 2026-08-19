@@ -1,16 +1,7 @@
 #!/usr/bin/env node
 import assert from 'node:assert/strict'
-import {
-  createHash,
-  createPublicKey,
-  verify as verifySignature,
-} from 'node:crypto'
-import {
-  mkdir,
-  readFile,
-  stat,
-  writeFile,
-} from 'node:fs/promises'
+import { createHash, createPublicKey, verify as verifySignature } from 'node:crypto'
+import { mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
@@ -53,7 +44,7 @@ function stableScope(scope) {
 
 export function canonicalAuthorizationPayload(record) {
   const a = record.authorization
-  const canonical = {
+  return JSON.stringify({
     schema_version: record.schema_version,
     authorization_id: a.authorization_id,
     owner_key: {
@@ -63,10 +54,7 @@ export function canonicalAuthorizationPayload(record) {
     environment: a.environment,
     repository: a.repository,
     branch: a.branch,
-    provider: {
-      name: a.provider.name,
-      region: a.provider.region,
-    },
+    provider: { name: a.provider.name, region: a.provider.region },
     source: {
       git_sha: a.source.git_sha,
       oci_image_digest: a.source.oci_image_digest,
@@ -78,8 +66,7 @@ export function canonicalAuthorizationPayload(record) {
       expires_at: a.validity.expires_at,
     },
     nonce: a.nonce,
-  }
-  return JSON.stringify(canonical)
+  })
 }
 
 export function publicKeyFingerprint(publicKeyPem) {
@@ -123,13 +110,14 @@ function validateStructure(record) {
 export function verifyOwnerAuthorization({
   record,
   publicKeyPem,
+  expectedOwnerKeyFingerprint,
   expectedRepository,
   expectedBranch,
   expectedSourceSha,
   expectedImageDigest,
   expectedProvider,
   expectedRegion,
-  executionSpendCapAudCents,
+  requestedSpendAudCents,
   requiredActions = [],
   now = new Date(),
   consumedNonceHashes = new Set(),
@@ -137,14 +125,16 @@ export function verifyOwnerAuthorization({
   validateStructure(record)
   const a = record.authorization
 
+  assert.match(expectedOwnerKeyFingerprint, SHA256_HEX, 'Expected owner trust-anchor fingerprint must be SHA-256 hex')
   assert.equal(a.repository, expectedRepository, 'Authorization repository does not match execution repository')
   assert.equal(a.branch, expectedBranch, 'Authorization branch does not match execution branch')
   assert.equal(a.source.git_sha, expectedSourceSha, 'Authorization invalid: source SHA changed')
   assert.equal(a.source.oci_image_digest, expectedImageDigest, 'Authorization invalid: OCI image digest changed')
   assert.equal(a.provider.name, expectedProvider, 'Authorization provider scope mismatch')
   assert.equal(a.provider.region, expectedRegion, 'Authorization provider region mismatch')
-  assert.ok(Number.isSafeInteger(executionSpendCapAudCents) && executionSpendCapAudCents >= 0, 'executionSpendCapAudCents must be a non-negative integer')
-  assert.ok(a.scope.max_spend_aud_cents <= executionSpendCapAudCents, 'Authorization spend cap exceeds execution-approved spend cap')
+
+  assert.ok(Number.isSafeInteger(requestedSpendAudCents) && requestedSpendAudCents >= 0, 'requestedSpendAudCents must be a non-negative integer')
+  assert.ok(requestedSpendAudCents <= a.scope.max_spend_aud_cents, 'Requested execution spend exceeds owner-signed spend cap')
 
   for (const requiredAction of requiredActions) {
     assert.ok(KNOWN_MUTATING_ACTIONS.includes(requiredAction), `Required action is not a known mutating staging action: ${requiredAction}`)
@@ -163,7 +153,9 @@ export function verifyOwnerAuthorization({
   assert.ok(nowMs <= expiresAt, 'Authorization has expired')
 
   const fingerprint = publicKeyFingerprint(publicKeyPem)
-  assert.equal(fingerprint, a.owner_key.public_key_spki_sha256, 'Owner public key fingerprint mismatch')
+  assert.equal(fingerprint, expectedOwnerKeyFingerprint, 'Supplied owner public key does not match externally pinned trust anchor')
+  assert.equal(a.owner_key.public_key_spki_sha256, expectedOwnerKeyFingerprint, 'Authorization record owner key does not match externally pinned trust anchor')
+
   const payload = canonicalAuthorizationPayload(record)
   const signature = Buffer.from(record.signature.signature_b64url, 'base64url')
   assert.equal(verifySignature(null, Buffer.from(payload, 'utf8'), publicKeyPem, signature), true, 'Owner Ed25519 signature verification failed')
@@ -173,14 +165,18 @@ export function verifyOwnerAuthorization({
 
   return {
     valid: true,
+    execution_authorized: false,
+    preflight_only: true,
     authorization_id: a.authorization_id,
     key_id: a.owner_key.key_id,
+    owner_key_fingerprint: expectedOwnerKeyFingerprint,
     source_sha: a.source.git_sha,
     image_digest: a.source.oci_image_digest,
     provider: a.provider.name,
     region: a.provider.region,
     allowed_actions: [...a.scope.allowed_actions],
     max_spend_aud_cents: a.scope.max_spend_aud_cents,
+    requested_spend_aud_cents: requestedSpendAudCents,
     expires_at: a.validity.expires_at,
     nonce_hash: hash,
   }
@@ -242,8 +238,8 @@ function parseArgs(argv) {
 async function cli() {
   const args = parseArgs(process.argv.slice(2))
   const required = [
-    'record', 'publicKey', 'expectedRepository', 'expectedBranch', 'expectedSourceSha',
-    'expectedImageDigest', 'expectedProvider', 'expectedRegion', 'executionSpendCapAudCents',
+    'record', 'publicKey', 'expectedOwnerKeyFingerprint', 'expectedRepository', 'expectedBranch',
+    'expectedSourceSha', 'expectedImageDigest', 'expectedProvider', 'expectedRegion', 'requestedSpendAudCents',
   ]
   for (const name of required) assert.ok(args[name], `--${name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} is required`)
   const record = JSON.parse(await readFile(args.record, 'utf8'))
@@ -256,13 +252,14 @@ async function cli() {
   const verification = verifyOwnerAuthorization({
     record,
     publicKeyPem,
+    expectedOwnerKeyFingerprint: args.expectedOwnerKeyFingerprint,
     expectedRepository: args.expectedRepository,
     expectedBranch: args.expectedBranch,
     expectedSourceSha: args.expectedSourceSha,
     expectedImageDigest: args.expectedImageDigest,
     expectedProvider: args.expectedProvider,
     expectedRegion: args.expectedRegion,
-    executionSpendCapAudCents: Number(args.executionSpendCapAudCents),
+    requestedSpendAudCents: Number(args.requestedSpendAudCents),
     requiredActions: args.requiredActions,
     now: args.now ? new Date(args.now) : new Date(),
     consumedNonceHashes: consumed,
@@ -270,6 +267,9 @@ async function cli() {
   if (args.consumeNonce) {
     assert.ok(args.nonceLedgerDir, '--nonce-ledger-dir is required with --consume-nonce')
     await consumeAuthorizationNonce({ ledgerDir: args.nonceLedgerDir, verification })
+    verification.execution_authorized = true
+    verification.preflight_only = false
+    verification.nonce_consumed = true
   }
   process.stdout.write(`${JSON.stringify(verification, null, 2)}\n`)
 }
