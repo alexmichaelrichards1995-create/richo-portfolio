@@ -26,6 +26,10 @@ on:
       - 'INTEGRATION_COMMERCE_MARKETPLACE.md'
       - '.github/workflows/integration-reconciliation-ci.yml'
 
+concurrency:
+  group: integration-reconciliation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -63,8 +67,19 @@ jobs:
       - name: Install root dependencies
         run: npm install --no-audit --no-fund
 
-      - name: Start local Supabase
-        run: npx supabase start
+      - name: Start local Supabase with registry retry
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if npx supabase start; then
+              exit 0
+            fi
+            npx supabase stop --no-backup || true
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
 
       - name: Rebuild schema and canonical seed
         run: npx supabase db reset
@@ -249,7 +264,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Apply legacy-only migrations
-        run: ./scripts/run_migrations.sh
+        run: bash scripts/run_migrations.sh
 
       - name: Run compatibility suite without production credentials
         run: npm run test:legacy-marketplace
