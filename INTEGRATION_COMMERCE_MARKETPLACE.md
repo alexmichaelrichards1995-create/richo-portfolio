@@ -46,6 +46,20 @@ File fallback is restricted to explicit test/development use. It is not a produc
 
 Legacy Stripe Connect is isolated from customer Stripe with `STRIPE_CONNECT_SECRET_KEY`. Account creation requires `RICHO_MARKETPLACE_CONNECT_ENABLED=true`; transfers additionally require `RICHO_LIVE_PAYOUTS_ENABLED=true`. Both gates default off.
 
+## Main-branch reconciliation decisions
+
+The integration branch deliberately resolves current `main` choices rather than blindly copying them:
+
+- Root `package.json`: keep Next.js 16.2.12, React 19.2.8, Stripe 22.5.0 and Node 22; add same-major Express 4 / pg 8 compatibility dependencies instead of reverting to the older legacy package.
+- Generic root `subscriptions`: rejected. Customer, canonical Marketplace and legacy compatibility keep separate table names.
+- Generic legacy `DATABASE_URL`: rejected. Legacy compatibility requires `LEGACY_MARKETPLACE_DATABASE_URL`.
+- Legacy Stripe `STRIPE_API_KEY`: rejected. Compatibility Connect uses `STRIPE_CONNECT_SECRET_KEY` and separate default-off Connect/payout gates.
+- Main `.github/workflows/ci.yml`: superseded on this integration line by `.github/workflows/integration-reconciliation-ci.yml`, which tests all three commercial domains separately on Node 22 and separate database services.
+- The hardened webhook behavior is retained: no known fallback secret and no HTTP success before processing/idempotency persistence finishes.
+- The stronger `github-app/` implementation is the canonical Marketplace direction; the root Marketplace scaffold is compatibility-only.
+
+These are merge-resolution decisions on the integration branch, not production activation decisions.
+
 ## Invariants
 
 1. `customer_subscriptions`, `marketplace_subscriptions`, and `legacy_marketplace_subscriptions` are different domain models and must never be aliased or automatically synchronized by table-name tricks.
