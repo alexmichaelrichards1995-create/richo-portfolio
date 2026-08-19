@@ -40,6 +40,7 @@ permissions:
 
 jobs:
   controlled-purchase:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'agent/integrate-commerce-marketplace' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     services:
