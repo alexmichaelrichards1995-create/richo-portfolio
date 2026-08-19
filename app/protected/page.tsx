@@ -198,27 +198,41 @@ export default async function ProtectedPage({ searchParams }: ProtectedPageProps
                 <p className="text-sm text-muted-foreground">No entitlements have been granted yet.</p>
               ) : (
                 <div className="divide-y">
-                  {entitlements.map((entitlement) => (
-                    <div key={entitlement.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
-                      <div>
-                        <p className="font-medium capitalize">{entitlement.entitlement_type.replaceAll('_', ' ')}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Starts {formatDate(entitlement.starts_at)} · Expires {formatDate(entitlement.expires_at)}
-                        </p>
+                  {entitlements.map((entitlement) => {
+                    const hasDeliverable =
+                      entitlement.status === 'active' &&
+                      (entitlement.entitlement_type === 'download' || entitlement.entitlement_type === 'service_access')
+
+                    return (
+                      <div key={entitlement.id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="font-medium capitalize">{entitlement.entitlement_type.replaceAll('_', ' ')}</p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Starts {formatDate(entitlement.starts_at)} · Expires {formatDate(entitlement.expires_at)}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {hasDeliverable ? (
+                            <>
+                              <a
+                                href={`/api/entitlements/${encodeURIComponent(entitlement.id)}/download`}
+                                className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
+                              >
+                                {entitlement.entitlement_type === 'service_access' ? 'Open onboarding' : 'Secure download'}
+                              </a>
+                              <a
+                                href={`/api/entitlements/${encodeURIComponent(entitlement.id)}/receipts`}
+                                className="text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
+                              >
+                                Delivery receipts
+                              </a>
+                            </>
+                          ) : null}
+                          <StatusPill value={entitlement.status} />
+                        </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {entitlement.entitlement_type === 'download' && entitlement.status === 'active' ? (
-                          <a
-                            href={`/api/entitlements/${encodeURIComponent(entitlement.id)}/download`}
-                            className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
-                          >
-                            Secure download
-                          </a>
-                        ) : null}
-                        <StatusPill value={entitlement.status} />
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
