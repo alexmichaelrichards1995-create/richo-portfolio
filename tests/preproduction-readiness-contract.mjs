@@ -6,6 +6,10 @@ async function source(path) {
   return readFile(new URL(`../${path}`, import.meta.url), 'utf8')
 }
 
+function hasAssignment(text, name) {
+  return new RegExp(`^${name}=`, 'm').test(text)
+}
+
 test('public customer liveness does not disclose configuration state', async () => {
   const health = await source('app/api/health/route.ts')
 
@@ -35,22 +39,23 @@ test('environment examples preserve commercial credential separation and default
   const rootEnv = await source('.env.example')
   const githubEnv = await source('github-app/.env.example')
 
-  assert.match(rootEnv, /STRIPE_MODE=test/)
-  assert.match(rootEnv, /RICHO_LIVE_PAYMENTS_ENABLED=false/)
-  assert.match(rootEnv, /STRIPE_RESTRICTED_KEY=/)
-  assert.match(rootEnv, /LEGACY_MARKETPLACE_DATABASE_URL=/)
-  assert.match(rootEnv, /STRIPE_CONNECT_SECRET_KEY=/)
-  assert.match(rootEnv, /RICHO_MARKETPLACE_CONNECT_ENABLED=false/)
-  assert.match(rootEnv, /RICHO_LIVE_PAYOUTS_ENABLED=false/)
+  assert.equal(hasAssignment(rootEnv, 'STRIPE_MODE'), true)
+  assert.match(rootEnv, /^STRIPE_MODE=test$/m)
+  assert.match(rootEnv, /^RICHO_LIVE_PAYMENTS_ENABLED=false$/m)
+  assert.equal(hasAssignment(rootEnv, 'STRIPE_RESTRICTED_KEY'), true)
+  assert.equal(hasAssignment(rootEnv, 'LEGACY_MARKETPLACE_DATABASE_URL'), true)
+  assert.equal(hasAssignment(rootEnv, 'STRIPE_CONNECT_SECRET_KEY'), true)
+  assert.match(rootEnv, /^RICHO_MARKETPLACE_CONNECT_ENABLED=false$/m)
+  assert.match(rootEnv, /^RICHO_LIVE_PAYOUTS_ENABLED=false$/m)
 
-  assert.match(githubEnv, /DATABASE_URL=/)
-  assert.match(githubEnv, /DATABASE_SSL=/)
-  assert.match(githubEnv, /GITHUB_PRIVATE_KEY_B64=/)
-  assert.match(githubEnv, /SESSION_SECRET=/)
-  assert.match(githubEnv, /ADMIN_TOKEN=/)
-  assert.doesNotMatch(githubEnv, /SUPABASE_SECRET_KEY/)
-  assert.doesNotMatch(githubEnv, /STRIPE_RESTRICTED_KEY/)
-  assert.doesNotMatch(githubEnv, /LEGACY_MARKETPLACE_DATABASE_URL/)
+  assert.equal(hasAssignment(githubEnv, 'DATABASE_URL'), true)
+  assert.equal(hasAssignment(githubEnv, 'DATABASE_SSL'), true)
+  assert.equal(hasAssignment(githubEnv, 'GITHUB_PRIVATE_KEY_B64'), true)
+  assert.equal(hasAssignment(githubEnv, 'SESSION_SECRET'), true)
+  assert.equal(hasAssignment(githubEnv, 'ADMIN_TOKEN'), true)
+  assert.equal(hasAssignment(githubEnv, 'SUPABASE_SECRET_KEY'), false)
+  assert.equal(hasAssignment(githubEnv, 'STRIPE_RESTRICTED_KEY'), false)
+  assert.equal(hasAssignment(githubEnv, 'LEGACY_MARKETPLACE_DATABASE_URL'), false)
 })
 
 test('release runbook keeps infrastructure, rollback, money and owner gates explicit', async () => {
