@@ -1,10 +1,16 @@
-name: CI
+name: RICHO CI & L1 Evidence
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  test-and-certify-l1:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:15
@@ -14,52 +20,52 @@ jobs:
           POSTGRES_DB: postgres
         ports:
           - 5432:5432
-    strategy:
-      matrix:
-        node-version: [18.x]
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - uses: actions/checkout@v4
 
-      - name: Use Node.js
+      - name: Use Node.js 18
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: 18.x
+          cache: npm
 
-      - name: Install system deps (psql)
+      - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
-      - name: Install dependencies
+      - name: Install dependencies reproducibly
         run: |
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
 
-      - name: Wait for Postgres
+      - name: Wait for PostgreSQL
         env:
           PGPASSWORD: postgres
-        run: |
-          until pg_isready -h localhost -p 5432 -U postgres -d postgres; do sleep 1; done
+        run: until pg_isready -h localhost -p 5432 -U postgres -d postgres; do sleep 1; done
 
-      - name: Run migrations
+      - name: Run repository migrations
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          psql "$DATABASE_URL" -f migrations/001_create_subscriptions_table.sql
+        run: npm run migrate
 
-      - name: Set secrets for tests
+      - name: Run complete R.I.C.H.O. deterministic test chain
         env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
-        run: echo "secrets set"
-
-      - name: Run tests
-        env:
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
-          STRIPE_API_KEY: ${{ secrets.STRIPE_API_KEY }}
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
-        run: |
-          node tests/marketplace_webhook_handler.test.js
-          node tests/marketplace_webhook_handler.idempotency.test.js
-          node tests/webhook_signature.integration.test.js
+          GITHUB_WEBHOOK_SECRET: richo-ci-test-secret
+        run: npm test
+
+      - name: Generate immutable L1 evidence manifest
+        env:
+          RICHO_TEST_SUITE_PASSED: 'true'
+        run: node scripts/generate_l1_evidence.js
+
+      - name: Upload L1 certification evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: richo-l1-evidence-${{ github.sha }}
+          path: artifacts/l1/l1-evidence.json
+          if-no-files-found: error
+          retention-days: 90
