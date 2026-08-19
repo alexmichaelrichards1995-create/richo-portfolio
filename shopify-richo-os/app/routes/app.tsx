@@ -22,4 +22,11 @@ export function ErrorBoundary() {
   return boundary.error(useRouteError());
 }
 
-export const headers: HeadersFunction = (args) => boundary.headers(args);
+export const headers: HeadersFunction = (args) => {
+  const result = new Headers(boundary.headers(args));
+  result.set("X-Content-Type-Options", "nosniff");
+  result.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  result.set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()");
+  result.set("Cache-Control", "no-store, private");
+  return result;
+};
