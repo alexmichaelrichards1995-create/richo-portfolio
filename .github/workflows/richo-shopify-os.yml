@@ -26,3 +26,6 @@ jobs:
       - name: Run RICHO experiment lifecycle tests
         working-directory: shopify-richo-os
         run: node scripts/test-experiment-lifecycle.mjs
+      - name: Validate production readiness controls
+        working-directory: shopify-richo-os
+        run: node scripts/validate-production-readiness.mjs
