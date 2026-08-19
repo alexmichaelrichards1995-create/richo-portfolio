@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 export type ProductState = {
   id: string;
   title: string;
+  handle: string;
   descriptionHtml: string;
   status: string;
   updatedAt: string;
@@ -34,7 +35,7 @@ export async function fetchProductState(adminGraphql: (query: string, options?: 
   const response = await adminGraphql(`#graphql
     query RichoProductState($id: ID!) {
       product(id: $id) {
-        id title descriptionHtml status updatedAt
+        id title handle descriptionHtml status updatedAt
         seo { title description }
       }
     }
