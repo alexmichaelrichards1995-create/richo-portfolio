@@ -8,6 +8,7 @@ import { rankProducts } from "../lib/product-intelligence.server";
 import { fetchProductState, hashProductState, rollbackSnapshot } from "../lib/product-state.server";
 import { executeApprovedProductUpdate } from "../lib/shopify-product-executor.server";
 import { rollbackExecutedProductUpdate } from "../lib/shopify-product-rollback.server";
+import { decideRollback } from "../lib/rollback-review.server";
 import { listExperiments, markExperimentRolledBack, measureExperiment, startExperiment } from "../lib/experiment-ledger.server";
 import { fetchProductExperimentMetrics } from "../lib/product-experiment-metrics.server";
 
@@ -28,6 +29,16 @@ export async function action({ request }: ActionFunctionArgs) {
 
   if (intent === "approved" || intent === "rejected") {
     await decideAction({ shopDomain: session.shop, actionId, decision: intent, actorId: session.id });
+    return { ok: true, intent };
+  }
+
+  if (intent === "approve_rollback" || intent === "reject_rollback") {
+    await decideRollback({
+      shopDomain: session.shop,
+      actionId,
+      decision: intent === "approve_rollback" ? "approved" : "rejected",
+      actorId: session.id,
+    });
     return { ok: true, intent };
   }
 
@@ -79,8 +90,8 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "rollback") {
-    await rollbackExecutedProductUpdate({ shopDomain: session.shop, actionId, actorId: session.id, adminGraphql: admin.graphql });
-    await markExperimentRolledBack({ shopDomain: session.shop, actionId });
+    const result = await rollbackExecutedProductUpdate({ shopDomain: session.shop, actionId, actorId: session.id, adminGraphql: admin.graphql });
+    await markExperimentRolledBack({ shopDomain: session.shop, actionId, restoredHash: result.restoredHash });
     return { ok: true, intent };
   }
 
@@ -129,11 +140,11 @@ export default function RichoOperationsHome() {
   const { snapshot, decision, approvalQueue, productIntelligence, experiments, analyticsErrors } = useLoaderData<typeof loader>();
   const auditCount = approvalQueue.reduce((sum, action) => sum + action.auditEvents.length, 0);
   return <main style={{ maxWidth: 1200, margin: "0 auto", padding: 24, fontFamily: "system-ui" }}>
-    <header><p style={{opacity:.65}}>R.I.C.H.O. Systems · Shopify Operations OS</p><h1>Mission Control</h1><p>Observe → reason → propose → approve → execute → verify → measure → rollback when required.</p></header>
+    <header><p style={{opacity:.65}}>R.I.C.H.O. Systems · Shopify Operations OS</p><h1>Mission Control</h1><p>Observe → reason → propose → approve → execute → verify → measure → governed rollback when required.</p></header>
     {analyticsErrors.length > 0 && <section style={{border:"1px solid #d8a600",padding:14,borderRadius:10}}><strong>Analytics warning</strong><p>{analyticsErrors.join(" · ")}</p></section>}
     <section style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(165px,1fr))",gap:12,marginTop:20}}><Metric label="Operating score" value={`${decision.operatingScore}/100`}/><Metric label="30d sessions" value={snapshot.sessions}/><Metric label="Add-to-cart" value={`${decision.addToCartRate.toFixed(2)}%`}/><Metric label="Checkout" value={`${decision.checkoutRate.toFixed(2)}%`}/><Metric label="Conversion" value={`${decision.conversionRate.toFixed(2)}%`}/><Metric label="Revenue" value={`A$${snapshot.revenue.toFixed(2)}`}/></section>
     <section style={{marginTop:28}}><h2>Product Intelligence</h2><div style={{display:"grid",gap:8}}>{productIntelligence.map(p=><article key={p.id} style={{border:"1px solid #e5e5e5",borderRadius:10,padding:14}}><strong>{p.title} · {p.score}/100</strong><p>{p.issues.length ? p.issues.join(" · ") : "No structural issues detected."}</p><small>{p.recommendation}</small></article>)}</div></section>
-    <section style={{marginTop:28}}><h2>Approval Queue</h2><div style={{display:"grid",gap:10}}>{approvalQueue.map(a=>{const rolledBack=a.auditEvents.some(e=>e.event==="ROLLED_BACK");return <article key={a.id} style={{border:"1px solid #ddd",borderRadius:10,padding:16}}><strong>{a.title}</strong><p>{a.evidence}</p><p>{a.recommendation}</p><small>Agent: {a.agent} · Risk: {a.risk} · Status: {rolledBack ? "rolled back" : a.status}</small>{a.status === "proposed" && <Form method="post" style={{display:"flex",gap:8,marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="approved">Approve</button><button name="intent" value="rejected">Reject</button></Form>}{a.status === "approved" && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="execute">Execute Approved Change</button></Form>}{a.status === "executed" && !rolledBack && a.reversible && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="rollback">Rollback Executed Change</button></Form>}</article>})}</div></section>
+    <section style={{marginTop:28}}><h2>Approval Queue</h2><div style={{display:"grid",gap:10}}>{approvalQueue.map(a=>{const rolledBack=a.auditEvents.some(e=>e.event==="ROLLED_BACK");const rollbackRecommended=a.auditEvents.some(e=>e.event==="ROLLBACK_RECOMMENDED");const rollbackApproved=a.auditEvents.some(e=>e.event==="ROLLBACK_APPROVED");const rollbackRejected=a.auditEvents.some(e=>e.event==="ROLLBACK_REJECTED");return <article key={a.id} style={{border:"1px solid #ddd",borderRadius:10,padding:16}}><strong>{a.title}</strong><p>{a.evidence}</p><p>{a.recommendation}</p><small>Agent: {a.agent} · Risk: {a.risk} · Status: {rolledBack ? "rolled back" : a.status}</small>{a.status === "proposed" && <Form method="post" style={{display:"flex",gap:8,marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="approved">Approve</button><button name="intent" value="rejected">Reject</button></Form>}{a.status === "approved" && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="execute">Execute Approved Change</button></Form>}{a.status === "executed" && rollbackRecommended && !rollbackApproved && !rollbackRejected && !rolledBack && <Form method="post" style={{display:"flex",gap:8,marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="approve_rollback">Approve Recommended Rollback</button><button name="intent" value="reject_rollback">Reject Rollback</button></Form>}{a.status === "executed" && rollbackApproved && !rolledBack && <Form method="post" style={{marginTop:12}}><input type="hidden" name="actionId" value={a.id}/><button name="intent" value="rollback">Execute Approved Rollback</button></Form>}</article>})}</div></section>
     <section style={{marginTop:28}}><h2>Audit Ledger</h2><p>{auditCount} persisted audit event(s) across the current operating queue.</p></section>
     <section style={{marginTop:28}}><h2>Conversion Lab</h2><p>Current funnel: {snapshot.sessions} sessions → {snapshot.addToCarts} carts → {snapshot.checkouts} checkouts → {snapshot.purchases} purchases.</p><div style={{display:"grid",gap:10}}>{experiments.map(e=><article key={e.id} style={{border:"1px solid #ddd",borderRadius:10,padding:14}}><strong>{e.actionId}</strong><p>Status: {e.status}{e.impact ? ` · Impact: ${String(e.impact).replace("_"," ")}` : ""}{e.confidence ? ` · Confidence: ${e.confidence}` : ""}</p>{e.recommendation && <p><strong>R.I.C.H.O. recommendation:</strong> {String(e.recommendation).replace(/_/g," ")}</p>}<small>Baseline: {e.baseline.sessions} product sessions · {e.baseline.purchases} completed-checkout sessions · A${e.baseline.revenue} attributed sales</small>{e.outcome && <p><small>Outcome: {e.outcome.sessions} product sessions · {e.outcome.purchases} completed-checkout sessions · A${e.outcome.revenue} attributed sales</small></p>}{e.status === "running" && <Form method="post" style={{marginTop:10}}><input type="hidden" name="actionId" value={e.actionId}/><button name="intent" value="measure">Measure 7-Day Outcome</button></Form>}</article>)}</div></section>
   </main>;
