@@ -23,8 +23,10 @@ test('Marketplace migration is an explicit release command, not runtime startup'
   const packageJson = JSON.parse(await source('github-app/package.json'))
 
   assert.equal(packageJson.engines.node, '>=22 <23')
-  assert.equal(packageJson.scripts.start, 'node src/server.js')
+  assert.equal(packageJson.scripts.start, 'node src/hardened-entrypoint.js')
+  assert.equal(packageJson.scripts.dev, 'node --watch src/hardened-entrypoint.js')
   assert.equal(packageJson.scripts.migrate, 'node scripts/migrate.js')
+  assert.match(packageJson.scripts.check, /node --check src\/hardened-entrypoint\.js/)
   assert.doesNotMatch(packageJson.scripts.start, /migrate/)
 })
 
@@ -34,6 +36,21 @@ test('current Marketplace architecture requires process lifetime continuity', as
   assert.match(server, /setInterval\(workerTick, 3000\)/)
   assert.match(server, /setInterval\(expirePendingCancellations, 60000\)/)
   assert.match(server, /FOR UPDATE SKIP LOCKED/)
+})
+
+test('canonical startup sanitizes public readiness and gates detailed diagnostics', async () => {
+  const entrypoint = await source('github-app/src/hardened-entrypoint.js')
+
+  assert.match(entrypoint, /pathname === '\/health\/ready'/)
+  assert.match(entrypoint, /pathname === '\/admin\/health\/ready'/)
+  assert.match(entrypoint, /timingSafeEqualText/)
+  assert.match(entrypoint, /x-admin-token/)
+  assert.match(entrypoint, /Boolean\(process\.env\.ADMIN_TOKEN\)/)
+  assert.match(entrypoint, /writeJson\(res, ok \? 200 : 503, \{ ok \}\)/)
+  assert.match(entrypoint, /const checks = \{ \.\.\.readiness\.checks, admin_token: true \}/)
+  assert.match(entrypoint, /checked_at: new Date\(\)\.toISOString\(\)/)
+  assert.match(entrypoint, /captureRequest\(listener, req, '\/health\/ready'\)/)
+  assert.doesNotMatch(entrypoint, /console\.log\([^\n]*checks/)
 })
 
 test('hosting contract keeps OCI runtime canonical and stale Vercel runtime noncanonical', async () => {
@@ -100,4 +117,38 @@ test('Render staging blueprint example is fail-closed and commercially isolated'
   assert.doesNotMatch(blueprint, /highAvailability:/)
   assert.doesNotMatch(blueprint, /readReplicas:/)
   assert.doesNotMatch(blueprint, /^\s+domains:/m)
+})
+
+test('provider-neutral staging checklist requires secret hygiene and ten evidence receipts', async () => {
+  const checklist = await source('github-app/STAGING_SECRETS_AND_RECEIPTS.md')
+
+  assert.match(checklist, /PROVIDER-NEUTRAL \/ NO PROVISIONING AUTHORISED/)
+  assert.match(checklist, /Values must never be copied into this document, Git, CI logs, PR comments, issue comments, screenshots, or support tickets/)
+  assert.match(checklist, /public readiness must expose only the minimal readiness state/i)
+  assert.match(checklist, /admin diagnostics require `ADMIN_TOKEN`/)
+  assert.match(checklist, /Runtime startup must not be used as the migration mechanism/)
+  assert.match(checklist, /The stale Vercel `richo-github-app` deployment is not an acceptable rollback target/)
+
+  for (let receipt = 1; receipt <= 10; receipt += 1) {
+    assert.match(checklist, new RegExp(`RCP-STG-${String(receipt).padStart(3, '0')}`))
+  }
+
+  for (const secretName of [
+    'DATABASE_URL',
+    'GITHUB_CLIENT_SECRET',
+    'GITHUB_WEBHOOK_SECRET',
+    'GITHUB_PRIVATE_KEY_B64',
+    'SESSION_SECRET',
+    'ADMIN_TOKEN',
+  ]) {
+    assert.match(checklist, new RegExp(`\\`${secretName}\\``))
+  }
+
+  assert.match(checklist, /PLANNED/)
+  assert.match(checklist, /PROVISIONED/)
+  assert.match(checklist, /CONFIGURED/)
+  assert.match(checklist, /VERIFIED/)
+  assert.match(checklist, /FAILED/)
+  assert.match(checklist, /BLOCKED/)
+  assert.match(checklist, /RETIRED/)
 })
