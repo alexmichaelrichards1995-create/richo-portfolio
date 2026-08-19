@@ -1,18 +1,28 @@
 import { getDb } from './db.server';
-import { leaseNextJob, markJobComplete, markJobFailed } from './postgres-provisioning-jobs.server';
-import { executeProvisioningJob } from './provisioning-worker.server';
+import { createProvisioningJobStore } from './postgres-provisioning-jobs.server';
+import { executeProvisionJob } from './provisioning-worker.server';
 
 export async function runProvisioningCycle(workerId: string) {
   const db = getDb();
-  const job = await leaseNextJob(db, workerId);
+  const jobs = createProvisioningJobStore(db);
+  const job = await jobs.lease(workerId);
   if (!job) return { processed: false as const };
 
+  const payload = (job.payload ?? {}) as Record<string, unknown>;
+  const sku = String(payload.sku ?? payload.sourceSku ?? '');
+
   try {
-    await executeProvisioningJob(job);
-    await markJobComplete(db, job.id, workerId);
+    await executeProvisionJob({
+      id: String(job.id),
+      customerId: job.customer_gid,
+      sku,
+      kind: job.action,
+      attempts: job.attempts,
+    });
+    await jobs.complete(job.id, workerId);
     return { processed: true as const, jobId: job.id };
   } catch (error) {
-    await markJobFailed(db, job.id, workerId, error);
+    await jobs.retry(job.id, workerId, error);
     throw error;
   }
 }
