@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict'
-import {
-  generateKeyPairSync,
-  randomBytes,
-  sign,
-} from 'node:crypto'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { generateKeyPairSync, randomBytes, sign } from 'node:crypto'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -22,28 +18,28 @@ const SOURCE_SHA = 'a'.repeat(40)
 const IMAGE_DIGEST = `sha256:${'b'.repeat(64)}`
 const PROVIDER = 'render'
 const REGION = 'singapore'
+const NOW = new Date('2026-08-19T11:30:00.000Z')
 
 function keyMaterial() {
   const { publicKey, privateKey } = generateKeyPairSync('ed25519')
+  const publicKeyPem = publicKey.export({ type: 'spki', format: 'pem' })
   return {
-    publicKeyPem: publicKey.export({ type: 'spki', format: 'pem' }),
+    publicKeyPem,
     privateKey,
+    fingerprint: publicKeyFingerprint(publicKeyPem),
   }
 }
 
 function buildSignedRecord({
   privateKey,
   publicKeyPem,
-  now = new Date('2026-08-19T11:30:00.000Z'),
+  now = NOW,
   allowedActions = ['STG-ACT-003'],
   spendCap = 0,
   issuedOffsetMs = 0,
   notBeforeOffsetMs = 0,
   expiresOffsetMs = 60 * 60 * 1000,
 } = {}) {
-  const issuedAt = new Date(now.getTime() + issuedOffsetMs)
-  const notBefore = new Date(now.getTime() + notBeforeOffsetMs)
-  const expiresAt = new Date(now.getTime() + expiresOffsetMs)
   const record = {
     schema_version: 1,
     status: 'SIGNED_OWNER_AUTHORIZATION',
@@ -69,9 +65,9 @@ function buildSignedRecord({
         merge: false,
       },
       validity: {
-        issued_at: issuedAt.toISOString(),
-        not_before: notBefore.toISOString(),
-        expires_at: expiresAt.toISOString(),
+        issued_at: new Date(now.getTime() + issuedOffsetMs).toISOString(),
+        not_before: new Date(now.getTime() + notBeforeOffsetMs).toISOString(),
+        expires_at: new Date(now.getTime() + expiresOffsetMs).toISOString(),
       },
       nonce: randomBytes(32).toString('base64url'),
     },
@@ -89,88 +85,119 @@ function buildSignedRecord({
   return record
 }
 
-function verify(record, publicKeyPem, overrides = {}) {
+function verify(record, keys, overrides = {}) {
   return verifyOwnerAuthorization({
     record,
-    publicKeyPem,
+    publicKeyPem: keys.publicKeyPem,
+    expectedOwnerKeyFingerprint: keys.fingerprint,
     expectedRepository: REPOSITORY,
     expectedBranch: BRANCH,
     expectedSourceSha: SOURCE_SHA,
     expectedImageDigest: IMAGE_DIGEST,
     expectedProvider: PROVIDER,
     expectedRegion: REGION,
-    executionSpendCapAudCents: 0,
+    requestedSpendAudCents: 0,
     requiredActions: ['STG-ACT-003'],
-    now: new Date('2026-08-19T11:30:00.000Z'),
+    now: NOW,
     consumedNonceHashes: new Set(),
     ...overrides,
   })
 }
 
-test('accepts a valid Ed25519 owner authorization bound to exact staging source and scope', () => {
+test('accepts valid Ed25519 owner authorization as preflight only', () => {
   const keys = keyMaterial()
   const record = buildSignedRecord({ ...keys })
-  const result = verify(record, keys.publicKeyPem)
+  const result = verify(record, keys)
   assert.equal(result.valid, true)
+  assert.equal(result.execution_authorized, false)
+  assert.equal(result.preflight_only, true)
+  assert.equal(result.owner_key_fingerprint, keys.fingerprint)
   assert.equal(result.source_sha, SOURCE_SHA)
   assert.equal(result.image_digest, IMAGE_DIGEST)
   assert.deepEqual(result.allowed_actions, ['STG-ACT-003'])
   assert.match(result.nonce_hash, /^[0-9a-f]{64}$/)
 })
 
-test('rejects branch/source/image drift even when the signature itself is valid', () => {
+test('rejects branch/source/image/provider drift even with a valid signature', () => {
   const keys = keyMaterial()
   const record = buildSignedRecord({ ...keys })
-  assert.throws(() => verify(record, keys.publicKeyPem, { expectedSourceSha: 'c'.repeat(40) }), /source SHA changed/)
-  assert.throws(() => verify(record, keys.publicKeyPem, { expectedImageDigest: `sha256:${'d'.repeat(64)}` }), /OCI image digest changed/)
-  assert.throws(() => verify(record, keys.publicKeyPem, { expectedBranch: 'main' }), /branch does not match/)
+  assert.throws(() => verify(record, keys, { expectedSourceSha: 'c'.repeat(40) }), /source SHA changed/)
+  assert.throws(() => verify(record, keys, { expectedImageDigest: `sha256:${'d'.repeat(64)}` }), /OCI image digest changed/)
+  assert.throws(() => verify(record, keys, { expectedBranch: 'main' }), /branch does not match/)
+  assert.throws(() => verify(record, keys, { expectedProvider: 'fly' }), /provider scope mismatch/)
+  assert.throws(() => verify(record, keys, { expectedRegion: 'oregon' }), /region mismatch/)
 })
 
-test('rejects authorization scope escalation and spend beyond the execution cap', () => {
+test('rejects action scope escalation and spend above the owner-signed cap', () => {
   const keys = keyMaterial()
   const record = buildSignedRecord({ ...keys })
-  assert.throws(() => verify(record, keys.publicKeyPem, { requiredActions: ['STG-ACT-007'] }), /outside owner authorization scope/)
+  assert.throws(() => verify(record, keys, { requiredActions: ['STG-ACT-007'] }), /outside owner authorization scope/)
+  assert.throws(() => verify(record, keys, { requestedSpendAudCents: 1 }), /exceeds owner-signed spend cap/)
 
-  const spendRecord = buildSignedRecord({ ...keys, spendCap: 500 })
-  assert.throws(() => verify(spendRecord, keys.publicKeyPem), /spend cap exceeds/)
+  const capped = buildSignedRecord({ ...keys, spendCap: 500 })
+  assert.equal(verify(capped, keys, { requestedSpendAudCents: 500 }).valid, true)
+  assert.throws(() => verify(capped, keys, { requestedSpendAudCents: 501 }), /exceeds owner-signed spend cap/)
 })
 
 test('rejects expired, not-yet-active, and overlong authorizations', () => {
   const keys = keyMaterial()
   const expired = buildSignedRecord({ ...keys, issuedOffsetMs: -2 * 60 * 60 * 1000, notBeforeOffsetMs: -2 * 60 * 60 * 1000, expiresOffsetMs: -1000 })
-  assert.throws(() => verify(expired, keys.publicKeyPem), /expired/)
+  assert.throws(() => verify(expired, keys), /expired/)
 
   const future = buildSignedRecord({ ...keys, issuedOffsetMs: 60 * 1000, notBeforeOffsetMs: 60 * 1000, expiresOffsetMs: 2 * 60 * 60 * 1000 })
-  assert.throws(() => verify(future, keys.publicKeyPem), /not active yet/)
+  assert.throws(() => verify(future, keys), /not active yet/)
 
   const overlong = buildSignedRecord({ ...keys, expiresOffsetMs: (4 * 60 * 60 + 1) * 1000 })
-  assert.throws(() => verify(overlong, keys.publicKeyPem), /lifetime may not exceed/)
+  assert.throws(() => verify(overlong, keys), /lifetime may not exceed/)
 })
 
-test('rejects payload tampering and the wrong owner public key', () => {
-  const keys = keyMaterial()
-  const record = buildSignedRecord({ ...keys })
+test('rejects payload tampering, wrong key, and attacker-controlled replacement trust root', () => {
+  const owner = keyMaterial()
+  const record = buildSignedRecord({ ...owner })
   const tampered = structuredClone(record)
   tampered.authorization.provider.region = 'oregon'
-  assert.throws(() => verify(tampered, keys.publicKeyPem, { expectedRegion: 'oregon' }), /signature verification failed/)
+  assert.throws(() => verify(tampered, owner, { expectedRegion: 'oregon' }), /signature verification failed/)
 
-  const otherKeys = keyMaterial()
-  assert.throws(() => verify(record, otherKeys.publicKeyPem), /public key fingerprint mismatch/)
+  const attacker = keyMaterial()
+  assert.throws(() => verify(record, attacker, { expectedOwnerKeyFingerprint: owner.fingerprint }), /does not match externally pinned trust anchor/)
+
+  const attackerRecord = buildSignedRecord({ ...attacker })
+  assert.throws(
+    () => verifyOwnerAuthorization({
+      record: attackerRecord,
+      publicKeyPem: attacker.publicKeyPem,
+      expectedOwnerKeyFingerprint: owner.fingerprint,
+      expectedRepository: REPOSITORY,
+      expectedBranch: BRANCH,
+      expectedSourceSha: SOURCE_SHA,
+      expectedImageDigest: IMAGE_DIGEST,
+      expectedProvider: PROVIDER,
+      expectedRegion: REGION,
+      requestedSpendAudCents: 0,
+      requiredActions: ['STG-ACT-003'],
+      now: NOW,
+      consumedNonceHashes: new Set(),
+    }),
+    /externally pinned trust anchor/,
+  )
 })
 
-test('rejects consumed nonce hashes and atomically prevents nonce replay', async () => {
+test('rejects consumed nonce hashes and atomically prevents replay without storing raw nonce', async () => {
   const keys = keyMaterial()
   const record = buildSignedRecord({ ...keys })
   const hash = nonceHash(record.authorization.nonce)
-  assert.throws(() => verify(record, keys.publicKeyPem, { consumedNonceHashes: new Set([hash]) }), /already been consumed/)
+  assert.throws(() => verify(record, keys, { consumedNonceHashes: new Set([hash]) }), /already been consumed/)
 
-  const verification = verify(record, keys.publicKeyPem)
+  const verification = verify(record, keys)
   const ledgerDir = await mkdtemp(join(tmpdir(), 'richo-owner-auth-'))
   try {
-    const first = await consumeAuthorizationNonce({ ledgerDir, verification })
+    const first = await consumeAuthorizationNonce({ ledgerDir, verification, consumedAt: NOW })
     assert.match(first, new RegExp(`${hash}\\.json$`))
+    const receipt = await readFile(first, 'utf8')
+    assert.match(receipt, new RegExp(hash))
+    assert.doesNotMatch(receipt, new RegExp(record.authorization.nonce))
     await assert.rejects(
-      consumeAuthorizationNonce({ ledgerDir, verification }),
+      consumeAuthorizationNonce({ ledgerDir, verification, consumedAt: NOW }),
       /nonce replay detected/,
     )
   } finally {
