@@ -167,7 +167,7 @@ async function processMarketplace(client, action, payload) {
   if (action === 'purchased' || action === 'changed') {
     const status = tier === 'free' ? 'free' : 'active';
     await client.query(
-      `INSERT INTO subscriptions(account_id, account_login, plan_id, plan_name, tier, status, effective_at, raw_plan, updated_at)
+      `INSERT INTO marketplace_subscriptions(account_id, account_login, plan_id, plan_name, tier, status, effective_at, raw_plan, updated_at)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,now())
        ON CONFLICT(account_id) DO UPDATE SET
          account_login=EXCLUDED.account_login, plan_id=EXCLUDED.plan_id, plan_name=EXCLUDED.plan_name,
@@ -178,14 +178,14 @@ async function processMarketplace(client, action, payload) {
   } else if (action === 'cancelled') {
     if (isFuture) {
       await client.query(
-        `INSERT INTO subscriptions(account_id, account_login, plan_id, plan_name, tier, status, effective_at, raw_plan, updated_at)
+        `INSERT INTO marketplace_subscriptions(account_id, account_login, plan_id, plan_name, tier, status, effective_at, raw_plan, updated_at)
          VALUES($1,$2,$3,$4,$5,'cancellation_pending',$6,$7,now())
          ON CONFLICT(account_id) DO UPDATE SET status='cancellation_pending', effective_at=$6, updated_at=now()`,
         [account.id, account.login || null, plan.id || null, plan.name || 'Free', tier, effectiveAt, plan]
       );
     } else {
       await client.query(
-        `INSERT INTO subscriptions(account_id, account_login, plan_name, tier, status, effective_at, raw_plan, updated_at)
+        `INSERT INTO marketplace_subscriptions(account_id, account_login, plan_name, tier, status, effective_at, raw_plan, updated_at)
          VALUES($1,$2,'Free','free','free',$3,$4,now())
          ON CONFLICT(account_id) DO UPDATE SET plan_name='Free', tier='free', status='free', effective_at=$3, raw_plan=$4, updated_at=now()`,
         [account.id, account.login || null, effectiveAt, plan]
@@ -326,7 +326,7 @@ async function workerTick() {
 async function expirePendingCancellations() {
   if (!pool) return;
   await pool.query(
-    `UPDATE subscriptions SET tier='free', plan_name='Free', status='free', updated_at=now()
+    `UPDATE marketplace_subscriptions SET tier='free', plan_name='Free', status='free', updated_at=now()
      WHERE status='cancellation_pending' AND effective_at IS NOT NULL AND effective_at <= now()`
   );
 }
@@ -425,7 +425,7 @@ async function route(req, res) {
   if (req.method === 'GET' && url.pathname === '/dashboard') {
     const session = currentSession(req);
     if (!session) { res.writeHead(302, { Location: '/auth/github' }); return res.end(); }
-    const sub = pool ? await pool.query('SELECT tier,status,plan_name,effective_at FROM subscriptions WHERE account_id=$1', [session.github_id]) : { rows: [] };
+    const sub = pool ? await pool.query('SELECT tier,status,plan_name,effective_at FROM marketplace_subscriptions WHERE account_id=$1', [session.github_id]) : { rows: [] };
     const current = sub.rows[0] || { tier: 'free', status: 'free', plan_name: 'Free' };
     return html(res, 200, `<!doctype html><meta charset="utf-8"><title>R.I.C.H.O. Dashboard</title><style>body{font-family:system-ui;max-width:900px;margin:50px auto;padding:0 20px}.card{border:1px solid #ddd;border-radius:14px;padding:20px;margin:12px 0}</style><h1>R.I.C.H.O. Dashboard</h1><p>Signed in as <b>${String(session.login).replace(/[<>&"]/g,'')}</b></p><div class="card"><h2>${current.plan_name}</h2><p>Status: ${current.status}</p><p>Tier: ${current.tier}</p></div><div class="card"><h3>Enabled capabilities</h3><ul>${featuresForTier(current.tier).map((x)=>`<li>${x}</li>`).join('')}</ul></div>`);
   }
