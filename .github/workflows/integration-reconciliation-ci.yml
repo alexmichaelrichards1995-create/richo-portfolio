@@ -25,6 +25,10 @@ on:
       - '.env.example'
       - 'INTEGRATION_COMMERCE_MARKETPLACE.md'
       - '.github/workflows/integration-reconciliation-ci.yml'
+      - '.github/workflows/next-supabase-foundation-ci.yml'
+      - '.github/workflows/controlled-commerce-ci.yml'
+      - '.github/workflows/supabase-database-ci.yml'
+      - '.github/workflows/github-app-ci.yml'
 
 concurrency:
   group: integration-reconciliation-${{ github.event.pull_request.number || github.ref }}
