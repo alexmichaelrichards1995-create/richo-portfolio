@@ -11,6 +11,10 @@ additional_redirect_urls = [
 [db]
 shadow_port = 54320
 
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
 [storage]
 enabled = true
 file_size_limit = "500MiB"
@@ -18,3 +22,11 @@ file_size_limit = "500MiB"
 [storage.buckets.richo-digital-deliveries]
 public = false
 file_size_limit = "500MiB"
+allowed_mime_types = [
+  "application/pdf",
+  "application/zip",
+  "application/octet-stream",
+  "text/markdown",
+  "text/plain"
+]
+objects_path = "./richo-digital-deliveries"
