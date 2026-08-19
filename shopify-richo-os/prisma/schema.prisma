@@ -83,6 +83,22 @@ model RichoWebhookReceipt {
   @@map("richo_webhook_receipts")
 }
 
+model RichoSecurityEvent {
+  id            BigInt   @id @default(autoincrement())
+  shopDomain    String   @map("shop_domain")
+  event         String
+  actorId       String?  @map("actor_id")
+  targetId      String?  @map("target_id")
+  correlationId String?  @map("correlation_id")
+  severity      String   @default("info")
+  payload       Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([shopDomain, createdAt])
+  @@index([shopDomain, event, createdAt])
+  @@map("richo_security_events")
+}
+
 model RichoShopifyAction {
   id                    String   @id
   shopDomain            String   @map("shop_domain")
