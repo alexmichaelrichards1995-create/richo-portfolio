@@ -22,7 +22,7 @@ model Session {
   accountOwner  Boolean  @default(false)
   locale        String?
   collaborator  Boolean? @default(false)
-  emailVerified Boolean?  @default(false)
+  emailVerified Boolean? @default(false)
 
   @@index([shop])
 }
@@ -47,6 +47,7 @@ model RichoShopifyAction {
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @default(now()) @updatedAt @map("updated_at")
   auditEvents           RichoShopifyAuditEvent[]
+  experiment            RichoShopifyExperiment?
 
   @@index([shopDomain, status, createdAt])
   @@map("richo_shopify_actions")
@@ -65,4 +66,19 @@ model RichoShopifyAuditEvent {
 
   @@index([actionId, createdAt])
   @@map("richo_shopify_audit_events")
+}
+
+model RichoShopifyExperiment {
+  id         String   @id
+  actionId   String   @unique @map("action_id")
+  shopDomain String   @map("shop_domain")
+  baseline   Json
+  outcome    Json?
+  startedAt  DateTime @default(now()) @map("started_at")
+  measuredAt DateTime? @map("measured_at")
+  status     String   @default("running")
+  action     RichoShopifyAction @relation(fields: [actionId], references: [id], onDelete: Restrict)
+
+  @@index([shopDomain, status, startedAt])
+  @@map("richo_shopify_experiments")
 }
