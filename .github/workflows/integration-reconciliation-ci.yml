@@ -75,7 +75,7 @@ jobs:
       - name: Install root dependencies from lockfile
         run: npm ci --no-audit --no-fund
 
-      - name: Start local Supabase with registry retry
+      - name: Start local Supabase and apply committed migrations and seed
         shell: bash
         run: |
           for attempt in 1 2 3; do
@@ -88,9 +88,6 @@ jobs:
             fi
             sleep $((attempt * 10))
           done
-
-      - name: Rebuild schema and canonical seed
-        run: npx supabase db reset
 
       - name: Seed private delivery objects
         run: npx supabase seed buckets
