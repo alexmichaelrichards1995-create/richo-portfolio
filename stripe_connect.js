@@ -1,18 +1,31 @@
 /* stripe_connect.js
- * Stripe Connect + payout scaffolds.
- * Safety rule: absence of Stripe configuration is UNCONFIGURED, never a fake
- * successful connected-account or payout result.
+ * Legacy Stripe Connect + payout compatibility scaffold.
+ *
+ * Safety rules:
+ * - Missing Stripe configuration is UNCONFIGURED, never a fake success.
+ * - Connect account creation requires RICHO_MARKETPLACE_CONNECT_ENABLED=true.
+ * - Money movement additionally requires RICHO_LIVE_PAYOUTS_ENABLED=true.
+ * - Customer-commerce Stripe credentials are not reused here.
  */
 
 const { schedulePayout } = require('./stripe_integration');
 
 let stripe = null;
-if (process.env.STRIPE_API_KEY) {
+if (process.env.STRIPE_CONNECT_SECRET_KEY) {
   try {
-    stripe = require('stripe')(process.env.STRIPE_API_KEY);
+    const Stripe = require('stripe');
+    stripe = new Stripe(process.env.STRIPE_CONNECT_SECRET_KEY);
   } catch {
     stripe = null;
   }
+}
+
+function connectEnabled() {
+  return process.env.RICHO_MARKETPLACE_CONNECT_ENABLED === 'true';
+}
+
+function payoutsEnabled() {
+  return process.env.RICHO_LIVE_PAYOUTS_ENABLED === 'true';
 }
 
 async function createConnectAccount(org) {
@@ -23,7 +36,16 @@ async function createConnectAccount(org) {
       connected: false,
       accountId: null,
       state: 'UNCONFIGURED',
-      reason: 'STRIPE_API_KEY is not configured',
+      reason: 'STRIPE_CONNECT_SECRET_KEY is not configured',
+    };
+  }
+
+  if (!connectEnabled()) {
+    return {
+      connected: false,
+      accountId: null,
+      state: 'BLOCKED',
+      reason: 'R.I.C.H.O. Marketplace Connect is disabled',
     };
   }
 
@@ -51,7 +73,27 @@ async function executePayout(month, grossCents, connectedAccountId, options = {}
       success: false,
       scheduled: false,
       state: 'UNCONFIGURED',
-      reason: 'STRIPE_API_KEY is not configured',
+      reason: 'STRIPE_CONNECT_SECRET_KEY is not configured',
+      payout,
+    };
+  }
+
+  if (!connectEnabled()) {
+    return {
+      success: false,
+      scheduled: false,
+      state: 'BLOCKED',
+      reason: 'R.I.C.H.O. Marketplace Connect is disabled',
+      payout,
+    };
+  }
+
+  if (!payoutsEnabled()) {
+    return {
+      success: false,
+      scheduled: false,
+      state: 'BLOCKED',
+      reason: 'R.I.C.H.O. live payouts are disabled',
       payout,
     };
   }
@@ -79,4 +121,9 @@ async function executePayout(month, grossCents, connectedAccountId, options = {}
   };
 }
 
-module.exports = { createConnectAccount, executePayout };
+module.exports = {
+  createConnectAccount,
+  executePayout,
+  connectEnabled,
+  payoutsEnabled,
+};
