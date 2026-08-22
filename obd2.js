@@ -52,6 +52,17 @@ const READINESS_MONITORS = [
   'AC Refrigerant','O2 Sensor','O2 Heater','EGR System'
 ];
 
+const TAB_PANEL_IDS = Object.freeze({
+  connect: 'tab-connect',
+  live: 'tab-live',
+  diagnostics: 'tab-diagnostics',
+  tuning: 'tab-tuning',
+  flash: 'tab-flash',
+  files: 'tab-files',
+  logger: 'tab-logger',
+  settings: 'tab-settings'
+});
+
 const RPM_AXIS  = [600,1000,1500,2000,2500,3000,3500,4000,4500,5000,5500,6000,6500];
 const LOAD_AXIS = [10,20,30,40,50,60,70,80,90,100];
 
@@ -120,15 +131,44 @@ function crc32hex(str){
   return ((crc^0xFFFFFFFF)>>>0).toString(16).toUpperCase().padStart(8,'0');
 }
 function confirmAction(msg){ return window.confirm(msg); }
+function escapeHTML(value){
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&':'&amp;',
+    '<':'&lt;',
+    '>':'&gt;',
+    '"':'&quot;',
+    "'":'&#39;'
+  }[ch]));
+}
 
 // ─── Tab Navigation ──────────────────────────────────────────────────────────
 function initTabs(){
-  document.querySelectorAll('[role=tab]').forEach(btn=>{
-    btn.addEventListener('click',()=>{
-      document.querySelectorAll('[role=tab]').forEach(b=>b.classList.remove('active'));
-      document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-      btn.classList.add('active');
-      $(`tab-${btn.dataset.tab}`).classList.add('active');
+  const tabs = [...document.querySelectorAll('[role=tab]')];
+  const activateTab = btn => {
+    tabs.forEach(tab=>{
+      const active = tab === btn;
+      tab.classList.toggle('active', active);
+      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      tab.tabIndex = active ? 0 : -1;
+      const panel = $(TAB_PANEL_IDS[tab.dataset.tab]);
+      if(panel){
+        panel.classList.toggle('active', active);
+        panel.hidden = !active;
+      }
+    });
+  };
+  tabs.forEach((btn, index)=>{
+    btn.addEventListener('click',()=>activateTab(btn));
+    btn.addEventListener('keydown',e=>{
+      let nextIndex = null;
+      if(e.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length;
+      else if(e.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length;
+      else if(e.key === 'Home') nextIndex = 0;
+      else if(e.key === 'End') nextIndex = tabs.length - 1;
+      if(nextIndex === null) return;
+      e.preventDefault();
+      tabs[nextIndex].focus();
+      activateTab(tabs[nextIndex]);
     });
   });
 }
@@ -206,7 +246,7 @@ async function doDisconnect(){
 async function scanPorts(){
   const list = $('adapter-list');
   list.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Scanning…</div>';
-  if(state.demo){
+  if(state.demo || $('conn-type').value === 'demo'){
     await delay(600);
     const demos = ['/dev/ttyUSB0','/dev/ttyUSB1','COM3','COM4','COM9'];
     const sel = $('conn-port');
@@ -330,6 +370,7 @@ function buildLogChart(){
 }
 
 function tickLive(){
+  if(!state.liveRunning && !state.logRunning) return;
   const ts = new Date().toLocaleTimeString();
   [...state.currentPids].forEach(key=>{
     const val = simulateLiveValue(key);
@@ -387,6 +428,10 @@ function stopLive(){
   state.liveRunning = false;
   $('btn-live-start').disabled = false;
   $('btn-live-stop').disabled = true;
+  if(!state.logRunning && state.liveInterval){
+    clearInterval(state.liveInterval);
+    state.liveInterval = null;
+  }
 }
 
 // ─── PID Toggles ─────────────────────────────────────────────────────────────
@@ -453,26 +498,41 @@ function buildReadinessGrid(){
   }).join('');
 }
 
-function readDTCs(){
-  const codes = state.demo ? generateDemoDTCs() : [];
+async function readDTCs(){
+  let entries;
+  if(state.demo){
+    entries = generateDemoDTCs().map(code=>({ code, status:'Current', description:DTC_DB[code]||'Unknown fault — consult OEM documentation' }));
+  } else {
+    try{
+      const res = await apiFetch('/api/obd2/dtcs');
+      if(!res.ok || !Array.isArray(res.dtcs)) throw new Error(res.error || 'Unable to read DTCs');
+      entries = res.dtcs.map(dtc=>({
+        code: dtc.code || '',
+        status: dtc.status || 'Current',
+        description: dtc.description || DTC_DB[dtc.code] || 'Unknown fault — consult OEM documentation'
+      }));
+    } catch(e){
+      toast('Failed to read DTCs: ' + e.message,'error');
+      return;
+    }
+  }
   const tbody = $('dtc-tbody');
-  $('dtc-count').textContent = codes.length;
-  if(!codes.length){
+  $('dtc-count').textContent = entries.length;
+  if(!entries.length){
     tbody.innerHTML='<tr><td colspan="5" style="color:var(--ok);text-align:center;padding:1.5rem">✅ No DTCs found. System clean.</td></tr>';
     return;
   }
-  tbody.innerHTML = codes.map(c=>{
-    const type = c[0].toLowerCase();
-    const desc = DTC_DB[c]||'Unknown fault — consult OEM documentation';
+  tbody.innerHTML = entries.map(({ code, status, description })=>{
+    const type = code[0]?.toLowerCase() || 'p';
     return `<tr>
-      <td class="dtc-code">${c}</td>
+      <td class="dtc-code">${escapeHTML(code)}</td>
       <td><span class="dtc-severity ${type}">${type.toUpperCase()}</span></td>
-      <td>${desc}</td>
-      <td style="color:var(--warn);font-size:.78rem">Current</td>
-      <td><button class="btn btn-secondary btn-xs" onclick="showFreezeFrame('${c}')">View</button></td>
+      <td>${escapeHTML(description)}</td>
+      <td style="color:var(--warn);font-size:.78rem">${escapeHTML(status)}</td>
+      <td><button class="btn btn-secondary btn-xs" onclick='showFreezeFrame(${JSON.stringify(code)})'>View</button></td>
     </tr>`;
   }).join('');
-  toast(`Read ${codes.length} DTC${codes.length>1?'s':''}`, codes.length?'warn':'success');
+  toast(`Read ${entries.length} DTC${entries.length>1?'s':''}`, entries.length?'warn':'success');
 }
 
 function generateDemoDTCs(){
@@ -648,6 +708,26 @@ function stepState(id, status){
   else num.className='step-num';
 }
 
+function resetFlashSteps(){
+  ['backup','auth','erase','write','verify','reset'].forEach(id=>stepState(id,'idle'));
+}
+
+function updateFlashSteps(progress){
+  const thresholds = [
+    { id:'backup', done:10, active:0 },
+    { id:'auth', done:20, active:10 },
+    { id:'erase', done:45, active:20 },
+    { id:'write', done:90, active:45 },
+    { id:'verify', done:98, active:90 },
+    { id:'reset', done:100, active:98 }
+  ];
+  thresholds.forEach(({ id, done, active })=>{
+    if(progress >= done) stepState(id,'done');
+    else if(progress >= active) stepState(id,'active');
+    else stepState(id,'idle');
+  });
+}
+
 async function runFlash(){
   if(!state.demo && !state.connected){ toast('Connect first','warn'); return; }
   if(!state.flashFile){ toast('Load a tune file first','warn'); return; }
@@ -655,6 +735,48 @@ async function runFlash(){
   if(state.settings.humanapproval && !confirmAction('Human approval required. Do you authorise this ECU flash operation?')) return;
 
   $('flash-progress-wrap').style.display='block';
+  resetFlashSteps();
+  if(!state.demo){
+    if(typeof state.flashFile.arrayBuffer !== 'function'){
+      toast('Reload the original tune file before using backend flash','warn');
+      return;
+    }
+    try{
+      const res = await fetch('/api/obd2/flash', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/octet-stream',
+          'X-Filename': state.flashFile.name || 'tune.bin'
+        },
+        body:state.flashFile
+      });
+      const payload = await res.json();
+      if(!res.ok || !payload.ok) throw new Error(payload.error || payload.message || 'Flash start failed');
+      for(;;){
+        const status = await apiFetch('/api/obd2/flash/status');
+        $('flash-log').textContent = (status.log || []).join('\n') + ((status.log || []).length ? '\n' : '');
+        updateFlashSteps(status.progress || 0);
+        setProgress(status.progress || 0, status.step || 'Waiting for backend flash status…');
+        if((status.log || []).some(line=>line.includes('FLASH ERROR'))){
+          toast('ECU flash failed','error');
+          return;
+        }
+        if(!status.active){
+          if((status.progress || 0) >= 100){
+            toast('ECU flash complete ✓','success');
+          } else {
+            toast('ECU flash did not complete','error');
+          }
+          return;
+        }
+        await delay(1000);
+      }
+    } catch(e){
+      toast('ECU flash failed: ' + e.message,'error');
+      flashLog('FLASH ERROR: ' + e.message);
+    }
+    return;
+  }
   const steps=[
     {id:'backup', label:'Backing up ECU image…', dur:2000},
     {id:'auth',   label:'Security access handshake…', dur:1500},
@@ -686,6 +808,32 @@ function setProgress(pct, text){
 
 async function backupECU(){
   if(!state.demo && !state.connected){ toast('Connect first','warn'); return; }
+  if(!state.demo){
+    try{
+      flashLog('Starting ECU backup…');
+      toast('Backing up ECU…','info');
+      const res = await fetch('/api/obd2/backup');
+      if(!res.ok){
+        const payload = await res.json().catch(()=>({}));
+        throw new Error(payload.error || 'Backup failed');
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const disposition = res.headers.get('Content-Disposition') || '';
+      const match = disposition.match(/filename="([^"]+)"/);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = match?.[1] || `ecu_backup_${Date.now()}.bin`;
+      a.click();
+      URL.revokeObjectURL(url);
+      flashLog('ECU backup saved.');
+      toast('ECU backup downloaded ✓','success');
+    } catch(e){
+      toast('ECU backup failed: ' + e.message,'error');
+      flashLog('BACKUP ERROR: ' + e.message);
+    }
+    return;
+  }
   flashLog('Starting ECU backup…');
   toast('Backing up ECU…','info');
   await delay(2000);
@@ -708,8 +856,8 @@ function renderTuneFiles(){
     <div class="tune-file-item" data-idx="${i}">
       <span class="tfi-icon">${f.fmt==='bin'?'🗂':f.fmt==='hex'?'📄':'📋'}</span>
       <div class="tfi-info">
-        <div class="tfi-name">${f.name}</div>
-        <div class="tfi-meta">${f.fmt.toUpperCase()} · ${fmtSize(f.size)} · ${f.date}</div>
+        <div class="tfi-name">${escapeHTML(f.name)}</div>
+        <div class="tfi-meta">${escapeHTML(f.fmt.toUpperCase())} · ${fmtSize(f.size)} · ${escapeHTML(f.date)}</div>
       </div>
       <div class="tfi-actions">
         <button class="btn btn-secondary btn-xs" onclick="selectTune(${i})">View</button>
@@ -724,12 +872,12 @@ function selectTune(i){
   const f = state.tuneFiles[i];
   $('tune-detail').innerHTML = `
     <div class="vehicle-info">
-      <div class="vi-row"><span>Name</span><span>${f.name}</span></div>
-      <div class="vi-row"><span>Format</span><span>${f.fmt.toUpperCase()}</span></div>
+      <div class="vi-row"><span>Name</span><span>${escapeHTML(f.name)}</span></div>
+      <div class="vi-row"><span>Format</span><span>${escapeHTML(f.fmt.toUpperCase())}</span></div>
       <div class="vi-row"><span>Size</span><span>${fmtSize(f.size)}</span></div>
-      <div class="vi-row"><span>Checksum</span><span>${f.chk}</span></div>
-      <div class="vi-row"><span>Date Imported</span><span>${f.date}</span></div>
-      <div class="vi-row"><span>Notes</span><span>${f.notes||'—'}</span></div>
+      <div class="vi-row"><span>Checksum</span><span>${escapeHTML(f.chk)}</span></div>
+      <div class="vi-row"><span>Date Imported</span><span>${escapeHTML(f.date)}</span></div>
+      <div class="vi-row"><span>Notes</span><span>${escapeHTML(f.notes||'—')}</span></div>
     </div>
     <div style="margin-top:.75rem;display:flex;gap:.5rem;flex-wrap:wrap">
       <button class="btn btn-primary btn-xs" onclick="flashFromTune(${i})">⚡ Flash This Tune</button>
@@ -813,6 +961,10 @@ function stopLogging(){
     localStorage.setItem('obd2_sessions',JSON.stringify(state.sessions));
     $('ls-sessions').textContent=state.sessions.length;
     renderSessions();
+  }
+  if(!state.liveRunning && state.liveInterval){
+    clearInterval(state.liveInterval);
+    state.liveInterval = null;
   }
   toast(`Recording stopped. ${state.logSamples} samples captured.`,'info');
 }
@@ -972,8 +1124,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
   // Load Chart.js from CDN dynamically
   const chartScript = document.createElement('script');
-  chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';
+  chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js';
+  chartScript.integrity = 'sha384-XcdcwHqIPULERb2yDEM4R0XaQKU3YnDsrTmjACBZyfdVVqjh6xQ4/DCMd7XLcA6Y';
+  chartScript.crossOrigin = 'anonymous';
   chartScript.onload = ()=>{ buildLiveChart(); buildLogChart(); };
+  chartScript.onerror = ()=>toast('Chart.js failed to load. Live charts are unavailable.','warn');
   document.head.appendChild(chartScript);
 
   // Diagnostics

@@ -66,7 +66,51 @@ function crc32(buf) {
   return ((crc ^ 0xFFFFFFFF) >>> 0).toString(16).toUpperCase().padStart(8, '0');
 }
 
-// ─── ELM327 AT command layer (stub — replace with real serialport I/O) ────────
+function waitForPortOpen(port) {
+  if (!port) return Promise.reject(new Error('No adapter port connected'));
+  if (port.isOpen) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => {
+      port.off('open', onOpen);
+      port.off('error', onError);
+      clearTimeout(timer);
+    };
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (err) reject(err);
+      else resolve();
+    };
+    const onOpen = () => finish();
+    const onError = err => finish(err);
+    const timer = setTimeout(() => finish(new Error('Timed out opening adapter port')), 3000);
+
+    port.once('open', onOpen);
+    port.once('error', onError);
+    if (typeof port.open === 'function' && port.autoOpen === false) {
+      try {
+        port.open(err => err && finish(err));
+      } catch (err) {
+        finish(err);
+      }
+    }
+  });
+}
+
+function normalizeAdapterResponse(cmd, raw) {
+  const normalizedCmd = cmd.trim().toUpperCase();
+  const lines = raw
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map(line => line.replace(/>/g, '').trim())
+    .filter(Boolean)
+    .filter(line => line.toUpperCase() !== normalizedCmd);
+  return lines.join('\n').trim() || 'NO DATA';
+}
+
+// ─── ELM327 AT command layer ───────────────────────────────────────────────────
 async function sendATCommand(cmd) {
   if (DEMO_MODE) {
     // Simulate ELM327 responses
@@ -82,8 +126,33 @@ async function sendATCommand(cmd) {
     await delay(80);
     return responses[cmd] || 'NO DATA';
   }
-  // Real implementation: write to adapter.port, await response line
-  throw new Error('Hardware communication not implemented. Set OBD2_DEMO=false only with serialport installed.');
+  await waitForPortOpen(adapter.port);
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let raw = '';
+    const cleanup = () => {
+      adapter.port.off('data', onData);
+      adapter.port.off('error', onError);
+      clearTimeout(timer);
+    };
+    const finish = (err, value) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      if (err) reject(err);
+      else resolve(value);
+    };
+    const onError = err => finish(err);
+    const onData = chunk => {
+      raw += chunk.toString('utf8');
+      if (raw.includes('>')) finish(null, normalizeAdapterResponse(cmd, raw));
+    };
+    const timer = setTimeout(() => finish(new Error(`Timed out waiting for response to ${cmd}`)), 3000);
+
+    adapter.port.on('data', onData);
+    adapter.port.on('error', onError);
+    adapter.port.write(`${cmd}\r`, err => err && finish(err));
+  });
 }
 
 // ─── OBD2 PID query ───────────────────────────────────────────────────────────
@@ -222,12 +291,7 @@ async function performECUFlash(fileBuffer, fileName) {
     flashState.step = step.label;
     flashState.progress = step.pct;
     appendFlashLog(step.label);
-    if (DEMO_MODE) {
-      await delay(800);
-    } else {
-      // Replace with real UDS command sends
-      throw new Error('Real UDS flashing not implemented without hardware driver');
-    }
+    if (DEMO_MODE) await delay(800);
   }
   flashState.active = false;
   appendFlashLog(`Flash success. File: ${fileName} · CRC-32: ${crc32(fileBuffer)}`);
@@ -394,6 +458,7 @@ router.post('/maps/:type', async (req, res) => {
 router.post('/flash', express.raw({ type: '*/*', limit: '16mb' }), async (req, res) => {
   if (!adapter.connected && !DEMO_MODE) return res.status(409).json({ error: 'Not connected' });
   if (flashState.active) return res.status(409).json({ error: 'Flash already in progress' });
+  if (!DEMO_MODE) return res.status(501).json({ ok: false, error: 'ECU flash requires a hardware-specific UDS driver.' });
 
   const fileName = req.headers['x-filename'] || 'tune.bin';
   const fileBuffer = req.body;

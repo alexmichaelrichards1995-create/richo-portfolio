@@ -31,21 +31,21 @@
 <!-- ═══════════════════════════════════════════════════════ TABS -->
 <nav class="obd-tabs">
   <ul role="tablist">
-    <li><button role="tab" class="active" data-tab="connect"><span class="tab-icon">🔌</span> Connect</button></li>
-    <li><button role="tab" data-tab="live"><span class="tab-icon">📊</span> Live Data</button></li>
-    <li><button role="tab" data-tab="diagnostics"><span class="tab-icon">🛠</span> Diagnostics</button></li>
-    <li><button role="tab" data-tab="tuning"><span class="tab-icon">⚡</span> Performance Tuning</button></li>
-    <li><button role="tab" data-tab="flash"><span class="tab-icon">🔁</span> ECU Flash</button></li>
-    <li><button role="tab" data-tab="files"><span class="tab-icon">📁</span> Tune Files</button></li>
-    <li><button role="tab" data-tab="logger"><span class="tab-icon">📈</span> Data Logger</button></li>
-    <li><button role="tab" data-tab="settings"><span class="tab-icon">⚙️</span> Settings</button></li>
+    <li><button role="tab" id="tab-btn-connect" class="active" data-tab="connect" aria-selected="true" aria-controls="tab-connect" tabindex="0"><span class="tab-icon">🔌</span> Connect</button></li>
+    <li><button role="tab" id="tab-btn-live" data-tab="live" aria-selected="false" aria-controls="tab-live" tabindex="-1"><span class="tab-icon">📊</span> Live Data</button></li>
+    <li><button role="tab" id="tab-btn-diagnostics" data-tab="diagnostics" aria-selected="false" aria-controls="tab-diagnostics" tabindex="-1"><span class="tab-icon">🛠</span> Diagnostics</button></li>
+    <li><button role="tab" id="tab-btn-tuning" data-tab="tuning" aria-selected="false" aria-controls="tab-tuning" tabindex="-1"><span class="tab-icon">⚡</span> Performance Tuning</button></li>
+    <li><button role="tab" id="tab-btn-flash" data-tab="flash" aria-selected="false" aria-controls="tab-flash" tabindex="-1"><span class="tab-icon">🔁</span> ECU Flash</button></li>
+    <li><button role="tab" id="tab-btn-files" data-tab="files" aria-selected="false" aria-controls="tab-files" tabindex="-1"><span class="tab-icon">📁</span> Tune Files</button></li>
+    <li><button role="tab" id="tab-btn-logger" data-tab="logger" aria-selected="false" aria-controls="tab-logger" tabindex="-1"><span class="tab-icon">📈</span> Data Logger</button></li>
+    <li><button role="tab" id="tab-btn-settings" data-tab="settings" aria-selected="false" aria-controls="tab-settings" tabindex="-1"><span class="tab-icon">⚙️</span> Settings</button></li>
   </ul>
 </nav>
 
 <main class="obd-body">
 
 <!-- ═══════════════════════════════════════════════════════ CONNECT -->
-<section id="tab-connect" class="tab-panel active" role="tabpanel">
+<section id="tab-connect" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-connect">
   <h1 class="page-title">🔌 Connect / Device Setup</h1>
   <p class="page-sub">Auto-detect your OBD2 adapter and establish a vehicle connection.</p>
 
@@ -143,7 +143,7 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ LIVE DATA -->
-<section id="tab-live" class="tab-panel" role="tabpanel">
+<section id="tab-live" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-live" hidden>
   <h1 class="page-title">📊 Live Data</h1>
   <p class="page-sub">Real-time sensor gauges and performance run overlay.</p>
 
@@ -201,7 +201,7 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ DIAGNOSTICS -->
-<section id="tab-diagnostics" class="tab-panel" role="tabpanel">
+<section id="tab-diagnostics" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-diagnostics" hidden>
   <h1 class="page-title">🛠 Diagnostics</h1>
   <p class="page-sub">Read and clear Diagnostic Trouble Codes, view freeze frame data and emissions readiness.</p>
 
@@ -247,7 +247,7 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ TUNING -->
-<section id="tab-tuning" class="tab-panel" role="tabpanel">
+<section id="tab-tuning" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-tuning" hidden>
   <h1 class="page-title">⚡ Performance Tuning</h1>
   <p class="page-sub">Edit ECU calibration maps and apply performance presets.</p>
 
@@ -328,7 +328,7 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ ECU FLASH -->
-<section id="tab-flash" class="tab-panel" role="tabpanel">
+<section id="tab-flash" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-flash" hidden>
   <h1 class="page-title">🔁 ECU Flash / Recode</h1>
   <p class="page-sub">Flash new firmware or a tune file to the ECU using UDS / KWP2000 protocol.</p>
 
@@ -427,7 +427,7 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ TUNE FILES -->
-<section id="tab-files" class="tab-panel" role="tabpanel">
+<section id="tab-files" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-files" hidden>
   <h1 class="page-title">📁 Tune Files</h1>
   <p class="page-sub">Load, save and manage tune files (.bin, .hex, .s19).</p>
 
@@ -454,7 +454,7 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ DATA LOGGER -->
-<section id="tab-logger" class="tab-panel" role="tabpanel">
+<section id="tab-logger" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-logger" hidden>
   <h1 class="page-title">📈 Data Logger</h1>
   <p class="page-sub">Record live sessions, replay logs, and compare runs.</p>
 
@@ -493,7 +493,7 @@
 </section>
 
 <!-- ═══════════════════════════════════════════════════════ SETTINGS -->
-<section id="tab-settings" class="tab-panel" role="tabpanel">
+<section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
   <h1 class="page-title">⚙️ Settings</h1>
   <p class="page-sub">Configure the OBD2 tool behaviour.</p>
 
