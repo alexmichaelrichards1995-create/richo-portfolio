@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>OBD2 Performance Tuning & ECU Upgrade Tool | Richo Systems</title>
+  <meta name="description" content="OBD2 scan tool for ECU tuning, live data monitoring, diagnostics, and ECU flashing." />
+  <meta name="robots" content="noindex,nofollow" />
+  <link rel="stylesheet" href="obd2.css" />
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════ HEADER -->
+<header class="obd-header">
+  <div class="hdr-inner">
+    <div class="obd-brand">
+      <span class="brand-icon">🚗</span>
+      <div>
+        OBD2 Performance Tool
+        <span class="brand-sub">ECU Diagnostics · Tuning · Flashing</span>
+      </div>
+    </div>
+    <div class="hdr-status">
+      <span class="conn-dot" id="conn-dot"></span>
+      <span id="conn-label">Disconnected</span>
+    </div>
+    <a class="hdr-back" href="index.html">← R.I.C.H.O. Hub</a>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════════════════════ TABS -->
+<nav class="obd-tabs">
+  <ul role="tablist">
+    <li><button role="tab" id="tab-btn-connect" class="active" data-tab="connect" aria-selected="true" aria-controls="tab-connect" tabindex="0"><span class="tab-icon">🔌</span> Connect</button></li>
+    <li><button role="tab" id="tab-btn-live" data-tab="live" aria-selected="false" aria-controls="tab-live" tabindex="-1"><span class="tab-icon">📊</span> Live Data</button></li>
+    <li><button role="tab" id="tab-btn-diagnostics" data-tab="diagnostics" aria-selected="false" aria-controls="tab-diagnostics" tabindex="-1"><span class="tab-icon">🛠</span> Diagnostics</button></li>
+    <li><button role="tab" id="tab-btn-tuning" data-tab="tuning" aria-selected="false" aria-controls="tab-tuning" tabindex="-1"><span class="tab-icon">⚡</span> Performance Tuning</button></li>
+    <li><button role="tab" id="tab-btn-flash" data-tab="flash" aria-selected="false" aria-controls="tab-flash" tabindex="-1"><span class="tab-icon">🔁</span> ECU Flash</button></li>
+    <li><button role="tab" id="tab-btn-files" data-tab="files" aria-selected="false" aria-controls="tab-files" tabindex="-1"><span class="tab-icon">📁</span> Tune Files</button></li>
+    <li><button role="tab" id="tab-btn-logger" data-tab="logger" aria-selected="false" aria-controls="tab-logger" tabindex="-1"><span class="tab-icon">📈</span> Data Logger</button></li>
+    <li><button role="tab" id="tab-btn-settings" data-tab="settings" aria-selected="false" aria-controls="tab-settings" tabindex="-1"><span class="tab-icon">⚙️</span> Settings</button></li>
+  </ul>
+</nav>
+
+<main class="obd-body">
+
+<!-- ═══════════════════════════════════════════════════════ CONNECT -->
+<section id="tab-connect" class="tab-panel active" role="tabpanel" aria-labelledby="tab-btn-connect">
+  <h1 class="page-title">🔌 Connect / Device Setup</h1>
+  <p class="page-sub">Auto-detect your OBD2 adapter and establish a vehicle connection.</p>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Adapter Configuration</div>
+      <div class="conn-form">
+        <div class="form-group">
+          <label class="form-label">Connection Type</label>
+          <select class="form-select" id="conn-type">
+            <option value="usb">USB / Serial (ELM327)</option>
+            <option value="bluetooth">Bluetooth SPP</option>
+            <option value="wifi">Wi-Fi (TCP)</option>
+            <option value="j2534">J2534 Pass-Thru</option>
+            <option value="demo">Demo / Simulation Mode</option>
+          </select>
+        </div>
+        <div class="form-row" id="conn-serial-opts">
+          <div class="form-group">
+            <label class="form-label">Serial Port</label>
+            <select class="form-select" id="conn-port">
+              <option value="">— scan for ports —</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Baud Rate</label>
+            <select class="form-select" id="conn-baud">
+              <option value="38400">38400</option>
+              <option value="9600">9600</option>
+              <option value="115200">115200</option>
+              <option value="57600">57600</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row" id="conn-wifi-opts" style="display:none">
+          <div class="form-group">
+            <label class="form-label">IP Address</label>
+            <input class="form-input" id="conn-ip" type="text" placeholder="192.168.0.10" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Port</label>
+            <input class="form-input" id="conn-tcpport" type="number" value="35000" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">OBD2 Protocol</label>
+          <select class="form-select" id="conn-protocol">
+            <option value="auto">Auto-detect</option>
+            <option value="iso15765">ISO 15765-4 CAN (11-bit, 500k)</option>
+            <option value="iso15765_29">ISO 15765-4 CAN (29-bit, 500k)</option>
+            <option value="iso14230-4">ISO 14230-4 KWP (fast init)</option>
+            <option value="iso9141-2">ISO 9141-2</option>
+            <option value="j1850pwm">SAE J1850 PWM</option>
+            <option value="j1850vpw">SAE J1850 VPW</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+          <button class="btn btn-secondary" id="btn-scan-ports" type="button">🔍 Scan Ports</button>
+          <button class="btn btn-primary" id="btn-connect" type="button">🔌 Connect</button>
+          <button class="btn btn-danger" id="btn-disconnect" type="button" disabled>⏹ Disconnect</button>
+        </div>
+        <div class="output" id="conn-output" style="min-height:60px;margin-top:.5rem">Not connected.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Detected Adapters</div>
+      <div id="adapter-list" class="adapter-list">
+        <div style="color:var(--muted);font-size:.85rem;padding:.5rem">Click "Scan Ports" to detect adapters.</div>
+      </div>
+      <button class="btn btn-secondary btn-block" id="btn-scan-bt" type="button" style="margin-top:.75rem">📶 Scan Bluetooth Devices</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1rem" id="vehicle-info-card">
+    <div class="card-title">Vehicle Information</div>
+    <div class="grid-3">
+      <div class="vehicle-info">
+        <div class="vi-row"><span>VIN</span><span id="vi-vin">—</span></div>
+        <div class="vi-row"><span>ECU ID</span><span id="vi-ecu">—</span></div>
+        <div class="vi-row"><span>Protocol</span><span id="vi-proto">—</span></div>
+      </div>
+      <div class="vehicle-info">
+        <div class="vi-row"><span>Make / Model</span><span id="vi-make">—</span></div>
+        <div class="vi-row"><span>Year</span><span id="vi-year">—</span></div>
+        <div class="vi-row"><span>Engine</span><span id="vi-engine">—</span></div>
+      </div>
+      <div class="vehicle-info">
+        <div class="vi-row"><span>Adapter</span><span id="vi-adapter">—</span></div>
+        <div class="vi-row"><span>ELM Version</span><span id="vi-elm">—</span></div>
+        <div class="vi-row"><span>Voltage</span><span id="vi-voltage">—</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ LIVE DATA -->
+<section id="tab-live" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-live" hidden>
+  <h1 class="page-title">📊 Live Data</h1>
+  <p class="page-sub">Real-time sensor gauges and performance run overlay.</p>
+
+  <div class="pid-selector" id="pid-selector">
+    <button class="pid-toggle active" data-pid="rpm">RPM</button>
+    <button class="pid-toggle active" data-pid="throttle">Throttle %</button>
+    <button class="pid-toggle active" data-pid="coolant">Coolant °C</button>
+    <button class="pid-toggle active" data-pid="speed">Speed km/h</button>
+    <button class="pid-toggle active" data-pid="maf">MAF g/s</button>
+    <button class="pid-toggle active" data-pid="boost">Boost kPa</button>
+    <button class="pid-toggle active" data-pid="afr">AFR</button>
+    <button class="pid-toggle active" data-pid="ignition">Ign Advance °</button>
+    <button class="pid-toggle" data-pid="intake">Intake Temp °C</button>
+    <button class="pid-toggle" data-pid="fuel">Fuel Level %</button>
+    <button class="pid-toggle" data-pid="load">Engine Load %</button>
+    <button class="pid-toggle" data-pid="timing">Timing Retard °</button>
+  </div>
+
+  <div class="gauges-grid" id="gauges-grid">
+    <!-- Injected by JS -->
+  </div>
+
+  <div class="chart-container">
+    <div class="chart-toolbar">
+      <span class="chart-title">Live Sensor Graph</span>
+      <button class="btn btn-secondary btn-xs" id="btn-live-start" type="button">▶ Start</button>
+      <button class="btn btn-danger btn-xs" id="btn-live-stop" type="button" disabled>⏹ Stop</button>
+      <button class="btn btn-secondary btn-xs" id="btn-live-clear" type="button">🗑 Clear</button>
+    </div>
+    <canvas id="live-chart" height="180"></canvas>
+  </div>
+
+  <div class="grid-2" style="margin-top:1rem">
+    <div class="card">
+      <div class="card-title">0–100 km/h Run</div>
+      <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="btn-sprint-start" type="button">🏁 Start Run</button>
+        <button class="btn btn-secondary" id="btn-sprint-reset" type="button">↺ Reset</button>
+        <div style="font-size:2rem;font-weight:900;color:var(--accent)" id="sprint-time">—</div>
+        <div style="color:var(--muted);font-size:.82rem" id="sprint-status">Ready</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Quarter Mile</div>
+      <div style="display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+        <button class="btn btn-primary" id="btn-qm-start" type="button">🏁 Start Run</button>
+        <button class="btn btn-secondary" id="btn-qm-reset" type="button">↺ Reset</button>
+        <div>
+          <div style="font-size:2rem;font-weight:900;color:var(--accent)" id="qm-time">—</div>
+          <div style="color:var(--muted);font-size:.78rem" id="qm-speed">— km/h trap</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ DIAGNOSTICS -->
+<section id="tab-diagnostics" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-diagnostics" hidden>
+  <h1 class="page-title">🛠 Diagnostics</h1>
+  <p class="page-sub">Read and clear Diagnostic Trouble Codes, view freeze frame data and emissions readiness.</p>
+
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
+    <button class="btn btn-primary" id="btn-read-dtc" type="button">🔍 Read DTCs</button>
+    <button class="btn btn-danger" id="btn-clear-dtc" type="button">🗑 Clear All DTCs</button>
+    <button class="btn btn-secondary" id="btn-freeze-frame" type="button">❄️ Freeze Frame</button>
+    <button class="btn btn-secondary" id="btn-readiness" type="button">✅ Readiness</button>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-title">Diagnostic Trouble Codes <span class="badge" id="dtc-count" style="margin-left:.5rem">0</span></div>
+    <div id="dtc-list">
+      <table class="dtc-table" id="dtc-table">
+        <thead>
+          <tr>
+            <th>Code</th>
+            <th>Type</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th>Freeze Frame</th>
+          </tr>
+        </thead>
+        <tbody id="dtc-tbody">
+          <tr><td colspan="5" style="color:var(--muted);text-align:center;padding:1.5rem">No DTCs read yet. Click "Read DTCs" to scan.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card" id="freeze-frame-card">
+      <div class="card-title">Freeze Frame Data</div>
+      <div id="freeze-frame-data" style="color:var(--muted);font-size:.85rem">Read a DTC to view freeze frame snapshot.</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Emissions Readiness Monitors</div>
+      <div class="readiness-grid" id="readiness-grid">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ TUNING -->
+<section id="tab-tuning" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-tuning" hidden>
+  <h1 class="page-title">⚡ Performance Tuning</h1>
+  <p class="page-sub">Edit ECU calibration maps and apply performance presets.</p>
+
+  <div class="warn-banner">
+    <span class="wi">⚠️</span>
+    <div>
+      <strong>Safety Warning:</strong> Modifying ECU calibration parameters beyond safe limits can cause engine damage, void warranties, and may affect emissions compliance. Always stay within the safety bounds shown. A human must review and approve all changes before writing to the ECU.
+    </div>
+  </div>
+
+  <div class="tune-controls">
+    <strong style="margin-right:.5rem">Preset Tunes:</strong>
+    <button class="preset-btn economy" data-preset="economy" type="button">🌿 Economy</button>
+    <button class="preset-btn street" data-preset="street" type="button">🚗 Street</button>
+    <button class="preset-btn track" data-preset="track" type="button">🏁 Track</button>
+    <button class="preset-btn" data-preset="stock" type="button">📋 Stock</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-secondary btn-xs" id="btn-read-maps" type="button">📥 Read from ECU</button>
+    <button class="btn btn-warn btn-xs" id="btn-write-maps" type="button" disabled>📤 Write to ECU</button>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:1.25rem">
+    <div class="card">
+      <div class="card-title">Fuel Map (VE Table) — Load vs RPM</div>
+      <div class="map-editor">
+        <table class="map-table" id="fuel-map-table">
+          <!-- Injected by JS -->
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Ignition Timing Map — Load vs RPM</div>
+      <div class="map-editor">
+        <table class="map-table" id="ignition-map-table">
+          <!-- Injected by JS -->
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1.25rem">
+    <div class="card-title">Performance Parameters</div>
+    <div class="param-sliders" id="param-sliders">
+      <!-- Injected by JS -->
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Boost Pressure Map</div>
+      <div class="map-editor">
+        <table class="map-table" id="boost-map-table">
+          <!-- Injected by JS -->
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Dyno Simulation</div>
+      <p style="color:var(--muted);font-size:.85rem;margin:0 0 .75rem">Estimated power change based on current map deltas vs stock.</p>
+      <button class="btn btn-primary" id="btn-dyno-calc" type="button">📐 Calculate Estimate</button>
+      <div class="dyno-result" id="dyno-result" style="display:none">
+        <div class="dr-val" id="dyno-hp">+0 HP</div>
+        <div class="dr-label">Estimated Peak Power Gain</div>
+        <div style="margin-top:.75rem;display:flex;justify-content:center;gap:2rem">
+          <div>
+            <div class="dr-val" style="font-size:1.5rem" id="dyno-torque">+0 Nm</div>
+            <div class="dr-label">Torque Gain</div>
+          </div>
+          <div>
+            <div class="dr-val" style="font-size:1.5rem" id="dyno-fuel">0%</div>
+            <div class="dr-label">Fuel Economy Δ</div>
+          </div>
+        </div>
+        <p style="font-size:.72rem;color:var(--muted);margin-top:.75rem">Simulation only. Actual results vary by vehicle, fuel quality, conditions and hardware.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ ECU FLASH -->
+<section id="tab-flash" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-flash" hidden>
+  <h1 class="page-title">🔁 ECU Flash / Recode</h1>
+  <p class="page-sub">Flash new firmware or a tune file to the ECU using UDS / KWP2000 protocol.</p>
+
+  <div class="warn-banner">
+    <span class="wi">🚨</span>
+    <div>
+      <strong>Critical Warning:</strong> ECU flashing can permanently brick the ECU if interrupted or if an incompatible file is used. <strong>Always back up the original ECU image first.</strong> Do not flash while the engine is running. Ensure battery voltage is above 12.5V. A human must authorise every flash operation.
+    </div>
+  </div>
+
+  <div class="grid-2" style="margin-bottom:1.25rem">
+    <div class="card">
+      <div class="card-title">Flash File</div>
+      <div class="file-drop" id="flash-file-drop">
+        <div class="fd-icon">📂</div>
+        <div class="fd-text">Drag & drop tune file here</div>
+        <div class="fd-hint">Supported: .bin, .hex, .s19, .rom, .cal</div>
+        <input type="file" id="flash-file-input" accept=".bin,.hex,.s19,.rom,.cal" style="display:none" />
+      </div>
+      <div class="file-meta" id="flash-file-meta" style="display:none">
+        <div><span>File:</span> <strong id="flash-fname">—</strong></div>
+        <div><span>Size:</span> <strong id="flash-fsize">—</strong></div>
+        <div><span>Checksum:</span> <strong id="flash-fchk">—</strong></div>
+        <div><span>Format:</span> <strong id="flash-ffmt">—</strong></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Flash Controls</div>
+      <div style="display:grid;gap:.65rem">
+        <button class="btn btn-secondary btn-block" id="btn-backup-ecu" type="button" disabled>💾 Backup Current ECU Image</button>
+        <button class="btn btn-warn btn-block" id="btn-verify-flash" type="button" disabled>🔍 Verify File Compatibility</button>
+        <button class="btn btn-danger btn-block" id="btn-start-flash" type="button" disabled>⚡ Start Flash</button>
+        <button class="btn btn-secondary btn-block" id="btn-restore-stock" type="button" disabled>↩ Restore Stock / Rollback</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:1.25rem">
+    <div class="card-title">Flash Progress</div>
+    <div class="flash-steps" id="flash-steps">
+      <div class="flash-step" id="fstep-backup">
+        <div class="step-num" id="fstep-backup-num">1</div>
+        <div class="step-body">
+          <div class="step-title">Backup Original ECU Image</div>
+          <div class="step-desc">Read and save current ECU calibration before any changes.</div>
+        </div>
+      </div>
+      <div class="flash-step" id="fstep-auth">
+        <div class="step-num" id="fstep-auth-num">2</div>
+        <div class="step-body">
+          <div class="step-title">Security Access (Seed/Key)</div>
+          <div class="step-desc">Authenticate with ECU using seed/key challenge-response.</div>
+        </div>
+      </div>
+      <div class="flash-step" id="fstep-erase">
+        <div class="step-num" id="fstep-erase-num">3</div>
+        <div class="step-body">
+          <div class="step-title">Erase Target Memory Region</div>
+          <div class="step-desc">Erase flash sectors targeted by the new calibration file.</div>
+        </div>
+      </div>
+      <div class="flash-step" id="fstep-write">
+        <div class="step-num" id="fstep-write-num">4</div>
+        <div class="step-body">
+          <div class="step-title">Write Calibration Data</div>
+          <div class="step-desc">Transfer tune data to ECU in verified 4KB blocks.</div>
+        </div>
+      </div>
+      <div class="flash-step" id="fstep-verify">
+        <div class="step-num" id="fstep-verify-num">5</div>
+        <div class="step-body">
+          <div class="step-title">Checksum Verification</div>
+          <div class="step-desc">Verify written data matches source file CRC-32 checksum.</div>
+        </div>
+      </div>
+      <div class="flash-step" id="fstep-reset">
+        <div class="step-num" id="fstep-reset-num">6</div>
+        <div class="step-body">
+          <div class="step-title">ECU Reset & Validation</div>
+          <div class="step-desc">Reset ECU and confirm successful boot with new calibration.</div>
+        </div>
+      </div>
+    </div>
+    <div class="progress-wrap" id="flash-progress-wrap" style="display:none">
+      <div class="progress-bar"><div class="progress-fill" id="flash-progress-fill"></div></div>
+      <div class="progress-label"><span id="flash-progress-text">Preparing…</span><span id="flash-progress-pct">0%</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Flash Log</div>
+    <div class="flash-log" id="flash-log">[OBD2 Tool] Ready. Load a tune file and connect to ECU to begin.
+</div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ TUNE FILES -->
+<section id="tab-files" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-files" hidden>
+  <h1 class="page-title">📁 Tune Files</h1>
+  <p class="page-sub">Load, save and manage tune files (.bin, .hex, .s19).</p>
+
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
+    <button class="btn btn-primary" id="btn-import-tune" type="button">📥 Import File</button>
+    <button class="btn btn-secondary" id="btn-export-tune" type="button" disabled>📤 Export Selected</button>
+    <button class="btn btn-secondary" id="btn-compare-tune" type="button" disabled>🔍 Compare Tunes</button>
+    <button class="btn btn-danger" id="btn-delete-tune" type="button" disabled>🗑 Delete</button>
+    <input type="file" id="tune-import-input" accept=".bin,.hex,.s19,.rom,.cal,.csv,.json" style="display:none" multiple />
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="card-title">Saved Tune Files</div>
+      <div class="tune-file-list" id="tune-file-list">
+        <!-- Injected by JS -->
+      </div>
+    </div>
+    <div class="card" id="tune-detail-card">
+      <div class="card-title">Tune Details</div>
+      <div id="tune-detail" style="color:var(--muted);font-size:.85rem">Select a tune file to view details.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ DATA LOGGER -->
+<section id="tab-logger" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-logger" hidden>
+  <h1 class="page-title">📈 Data Logger</h1>
+  <p class="page-sub">Record live sessions, replay logs, and compare runs.</p>
+
+  <div class="logger-status">
+    <span class="rec-dot" id="rec-dot"></span>
+    <strong id="rec-label">Not Recording</strong>
+    <span style="flex:1"></span>
+    <span style="color:var(--muted);font-size:.82rem" id="rec-duration">00:00:00</span>
+  </div>
+
+  <div class="logger-stats" id="logger-stats">
+    <div class="ls-item"><div class="ls-val" id="ls-samples">0</div><div class="ls-label">Samples</div></div>
+    <div class="ls-item"><div class="ls-val" id="ls-size">0 KB</div><div class="ls-label">Data Size</div></div>
+    <div class="ls-item"><div class="ls-val" id="ls-rate">0 Hz</div><div class="ls-label">Sample Rate</div></div>
+    <div class="ls-item"><div class="ls-val" id="ls-sessions">0</div><div class="ls-label">Saved Sessions</div></div>
+  </div>
+
+  <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.25rem">
+    <button class="btn btn-danger" id="btn-log-start" type="button">⏺ Start Recording</button>
+    <button class="btn btn-secondary" id="btn-log-stop" type="button" disabled>⏹ Stop</button>
+    <button class="btn btn-secondary" id="btn-log-export-csv" type="button" disabled>📊 Export CSV</button>
+    <button class="btn btn-secondary" id="btn-log-export-json" type="button" disabled>🗂 Export JSON</button>
+  </div>
+
+  <div class="card" style="margin-bottom:1rem">
+    <div class="card-title">Live Recording Chart</div>
+    <canvas id="logger-chart" height="160"></canvas>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Saved Sessions</div>
+    <div class="session-list" id="session-list">
+      <div style="color:var(--muted);font-size:.85rem;padding:.5rem">No sessions recorded yet.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════ SETTINGS -->
+<section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-btn-settings" hidden>
+  <h1 class="page-title">⚙️ Settings</h1>
+  <p class="page-sub">Configure the OBD2 tool behaviour.</p>
+
+  <div class="grid-2">
+    <div>
+      <div class="settings-section">
+        <div class="settings-section-title">Connection</div>
+        <div class="settings-grid">
+          <div class="setting-row">
+            <div><div class="setting-label">Auto-reconnect</div><div class="setting-sub">Re-establish connection if dropped</div></div>
+            <label class="toggle"><input type="checkbox" id="setting-autoreconnect" checked /><span class="toggle-slider"></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Connection Timeout</div><div class="setting-sub">Seconds before aborting connect</div></div>
+            <select class="form-select" style="width:90px" id="setting-timeout">
+              <option value="5">5s</option>
+              <option value="10" selected>10s</option>
+              <option value="20">20s</option>
+              <option value="30">30s</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">ELM327 Verbose</div><div class="setting-sub">Show raw AT command traffic</div></div>
+            <label class="toggle"><input type="checkbox" id="setting-verbose" /><span class="toggle-slider"></span></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Live Data</div>
+        <div class="settings-grid">
+          <div class="setting-row">
+            <div><div class="setting-label">Sample Rate</div><div class="setting-sub">Polls per second</div></div>
+            <select class="form-select" style="width:90px" id="setting-rate">
+              <option value="1">1 Hz</option>
+              <option value="2">2 Hz</option>
+              <option value="5" selected>5 Hz</option>
+              <option value="10">10 Hz</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Unit System</div><div class="setting-sub">Metric or Imperial</div></div>
+            <select class="form-select" style="width:120px" id="setting-units">
+              <option value="metric" selected>Metric</option>
+              <option value="imperial">Imperial</option>
+            </select>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Graph History</div><div class="setting-sub">Seconds of data shown</div></div>
+            <select class="form-select" style="width:90px" id="setting-history">
+              <option value="30">30s</option>
+              <option value="60" selected>60s</option>
+              <option value="120">120s</option>
+              <option value="300">300s</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="settings-section">
+        <div class="settings-section-title">Safety Limits</div>
+        <div class="settings-grid">
+          <div class="setting-row">
+            <div><div class="setting-label">Safety Lock</div><div class="setting-sub">Prevent writes above safe thresholds</div></div>
+            <label class="toggle"><input type="checkbox" id="setting-safetylock" checked /><span class="toggle-slider"></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Require Human Approval</div><div class="setting-sub">Prompt before any ECU write</div></div>
+            <label class="toggle"><input type="checkbox" id="setting-humanapproval" checked /><span class="toggle-slider"></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Max Ignition Advance</div><div class="setting-sub">Hard limit in degrees BTDC</div></div>
+            <input class="form-input" style="width:80px" type="number" id="setting-maxadv" value="45" min="0" max="60" />
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Rev Limit Warning</div><div class="setting-sub">Alert above this RPM</div></div>
+            <input class="form-input" style="width:90px" type="number" id="setting-revwarn" value="6500" min="1000" max="10000" />
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Data & Storage</div>
+        <div class="settings-grid">
+          <div class="setting-row">
+            <div><div class="setting-label">Auto-save Sessions</div><div class="setting-sub">Save log sessions automatically</div></div>
+            <label class="toggle"><input type="checkbox" id="setting-autosave" checked /><span class="toggle-slider"></span></label>
+          </div>
+          <div class="setting-row">
+            <div><div class="setting-label">Storage Location</div></div>
+            <select class="form-select" style="width:120px" id="setting-storage">
+              <option value="local">Local</option>
+              <option value="server">Server API</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem;display:flex;gap:.65rem;flex-wrap:wrap">
+        <button class="btn btn-primary" id="btn-save-settings" type="button">💾 Save Settings</button>
+        <button class="btn btn-secondary" id="btn-reset-settings" type="button">↺ Reset Defaults</button>
+        <button class="btn btn-danger" id="btn-clear-data" type="button">🗑 Clear All Data</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<script src="obd2.js" defer></script>
+</body>
+</html>
