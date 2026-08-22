@@ -25,7 +25,6 @@
 
 const express = require('express');
 const path    = require('path');
-const fs      = require('fs');
 const crypto  = require('crypto');
 
 const router = express.Router();
@@ -223,11 +222,12 @@ async function performECUFlash(fileBuffer, fileName) {
     flashState.step = step.label;
     flashState.progress = step.pct;
     appendFlashLog(step.label);
-    if (!DEMO_MODE) {
+    if (DEMO_MODE) {
+      await delay(800);
+    } else {
       // Replace with real UDS command sends
       throw new Error('Real UDS flashing not implemented without hardware driver');
     }
-    await delay(DEMO_MODE ? 800 : 2000);
   }
   flashState.active = false;
   appendFlashLog(`Flash success. File: ${fileName} · CRC-32: ${crc32(fileBuffer)}`);
@@ -403,10 +403,9 @@ router.post('/flash', express.raw({ type: '*/*', limit: '16mb' }), async (req, r
   const allowed = ['.bin','.hex','.s19','.rom','.cal'];
   if (!allowed.includes(ext)) return res.status(400).json({ error: `Unsupported file type: ${ext}` });
 
-  // Start flash asynchronously and return job ID
-  const jobId = crypto.randomUUID();
+  // Start flash asynchronously; single-session flash state tracks progress
   performECUFlash(fileBuffer, fileName).catch(e => appendFlashLog('FLASH ERROR: '+e.message));
-  res.json({ ok: true, jobId, message: 'Flash started' });
+  res.json({ ok: true, message: 'Flash started. Poll /flash/status for progress.' });
 });
 
 // GET /api/obd2/flash/status — poll flash progress

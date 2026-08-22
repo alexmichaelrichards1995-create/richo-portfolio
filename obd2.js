@@ -206,7 +206,7 @@ async function doDisconnect(){
 async function scanPorts(){
   const list = $('adapter-list');
   list.innerHTML = '<div style="color:var(--muted);font-size:.85rem;padding:.5rem">Scanning…</div>';
-  if(state.demo || true){ // show demo ports in browser
+  if(state.demo){
     await delay(600);
     const demos = ['/dev/ttyUSB0','/dev/ttyUSB1','COM3','COM4','COM9'];
     const sel = $('conn-port');
@@ -627,8 +627,14 @@ function handleFlashFile(file){
   $('flash-fsize').textContent = fmtSize(file.size);
   $('flash-ffmt').textContent = file.name.split('.').pop().toUpperCase();
   const reader = new FileReader();
-  reader.onload = e=>{ $('flash-fchk').textContent = crc32hex(e.target.result.toString().substring(0,2000)); };
-  reader.readAsText(file);
+  reader.onload = e=>{
+    const buf = new Uint8Array(e.target.result);
+    let crc=0xFFFFFFFF;
+    const table = (() => { const t = new Uint32Array(256); for(let i=0;i<256;i++){ let c=i; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[i]=c; } return t; })();
+    for(const byte of buf) crc = table[(crc^byte)&0xFF]^(crc>>>8);
+    $('flash-fchk').textContent = ((crc^0xFFFFFFFF)>>>0).toString(16).toUpperCase().padStart(8,'0');
+  };
+  reader.readAsArrayBuffer(file);
   $('flash-file-meta').style.display='flex';
   $('btn-verify-flash').disabled = !state.connected && !state.demo;
   flashLog(`File loaded: ${file.name} (${fmtSize(file.size)})`);
@@ -832,17 +838,23 @@ function exportSession(i, fmt){
   const s = state.sessions[i];
   let content, mime, ext;
   if(fmt==='csv'){
-    const pids=[...state.currentPids];
-    content='ts,'+pids.join(',')+'\n'+[...Array(s.samples)].map((_,j)=>`${j/state.settings.rate},`+pids.map(k=>+(Math.random()*100).toFixed(2)).join(',')).join('\n');
+    // Per-sample data is not retained for saved sessions to keep localStorage small.
+    // Export session summary metadata instead.
+    content = 'field,value\n'
+      + `name,"${s.name}"\n`
+      + `date,"${s.date}"\n`
+      + `samples,${s.samples}\n`
+      + `size,"${s.size}"\n`;
+    toast('Session exported as CSV (summary only — per-sample data not retained)','warn');
     mime='text/csv'; ext='csv';
   } else {
     content=JSON.stringify(s,null,2); mime='application/json'; ext='json';
+    toast(`Session exported as JSON ✓`,'success');
   }
   const blob=new Blob([content],{type:mime});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');a.href=url;a.download=`session_${s.id}.${ext}`;a.click();
   URL.revokeObjectURL(url);
-  toast(`Session exported as ${ext.toUpperCase()} ✓`,'success');
 }
 
 function deleteSession(i){
