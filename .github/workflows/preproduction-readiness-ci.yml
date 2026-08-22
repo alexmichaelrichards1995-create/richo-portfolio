@@ -1,0 +1,62 @@
+name: Preproduction Readiness CI
+
+on:
+  push:
+    branches:
+      - agent/integrate-commerce-marketplace
+    paths:
+      - 'app/api/health/**'
+      - 'github-app/**'
+      - 'tests/preproduction-readiness-contract.mjs'
+      - 'PREPRODUCTION_READINESS.md'
+      - '.env.example'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/preproduction-readiness-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'app/api/health/**'
+      - 'github-app/**'
+      - 'tests/preproduction-readiness-contract.mjs'
+      - 'PREPRODUCTION_READINESS.md'
+      - '.env.example'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/preproduction-readiness-ci.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preproduction-readiness-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  readiness-contract:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Preproduction readiness contract
+        run: npm run test:preproduction
+
+      - name: Billing and Storage security contracts
+        run: npm run test:billing
+
+      - name: Typecheck readiness routes
+        run: npm run typecheck

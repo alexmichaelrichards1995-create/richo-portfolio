@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "status": "TEMPLATE_ONLY_NOT_SIGNED",
+  "authorization": {
+    "authorization_id": "__OWNER_GENERATED_AUTHORIZATION_ID__",
+    "owner_key": {
+      "key_id": "__OWNER_KEY_ID__",
+      "public_key_spki_sha256": "__OWNER_PUBLIC_KEY_SPKI_SHA256__"
+    },
+    "environment": "staging",
+    "repository": "alexmichaelrichards1995-create/richo-portfolio",
+    "branch": "agent/integrate-commerce-marketplace",
+    "provider": {
+      "name": "render",
+      "region": "singapore"
+    },
+    "source": {
+      "git_sha": "__EXACT_40_HEX_GIT_SHA__",
+      "oci_image_digest": "__SHA256_OCI_IMAGE_DIGEST__"
+    },
+    "scope": {
+      "allowed_actions": [],
+      "max_spend_aud_cents": 0,
+      "production_promotion": false,
+      "live_payments": false,
+      "connect": false,
+      "payouts": false,
+      "dns_cutover": false,
+      "merge": false
+    },
+    "validity": {
+      "issued_at": "__RFC3339_UTC__",
+      "not_before": "__RFC3339_UTC__",
+      "expires_at": "__RFC3339_UTC_MAX_4_HOURS_AFTER_ISSUED__"
+    },
+    "nonce": "__256_BIT_BASE64URL_NONCE__"
+  },
+  "signature": {
+    "algorithm": "Ed25519",
+    "key_id": "__OWNER_KEY_ID__",
+    "signature_b64url": "__OWNER_SIGNATURE_OVER_CANONICAL_AUTHORIZATION_PAYLOAD__"
+  }
+}

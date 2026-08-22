@@ -1,7 +1,5 @@
 # R.I.C.H.O. Product Runtime Hub
 
-![CI](https://github.com/alexmichaelrichards1995-create/richo-portfolio/actions/workflows/ci.yml/badge.svg)
-
 A controlled browser-based runtime layer for the R.I.C.H.O. (Research Intelligence & Continuous Heuristic Optimisation) digital product catalogue.
 
 ## Current runtime

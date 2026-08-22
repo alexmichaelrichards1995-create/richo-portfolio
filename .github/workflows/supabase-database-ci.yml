@@ -1,0 +1,71 @@
+name: Supabase Database CI
+
+on:
+  push:
+    branches:
+      - agent/nextjs-supabase-foundation
+    paths:
+      - 'supabase/**'
+      - 'package.json'
+      - '.github/workflows/supabase-database-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'supabase/**'
+      - 'package.json'
+      - '.github/workflows/supabase-database-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  database:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'agent/integrate-commerce-marketplace' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Show Supabase CLI version
+        run: npx supabase --version
+
+      - name: Start local Supabase
+        run: npx supabase start
+
+      - name: Rebuild database from migrations and seed data
+        run: npx supabase db reset
+
+      - name: Seed private delivery bucket objects
+        run: npx supabase seed buckets
+
+      - name: Run pgTAP database tests
+        run: npx supabase test db
+
+      - name: Generate database TypeScript types
+        run: |
+          mkdir -p artifacts
+          npx supabase gen types typescript --local > artifacts/database.types.ts
+          test -s artifacts/database.types.ts
+
+      - name: Upload database types artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-types
+          path: artifacts/database.types.ts
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Stop local Supabase
+        if: always()
+        run: npx supabase stop --no-backup

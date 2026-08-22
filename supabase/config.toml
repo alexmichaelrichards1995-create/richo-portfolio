@@ -1,0 +1,31 @@
+project_id = "richo-systems-platform"
+
+[auth]
+enabled = true
+site_url = "http://localhost:3000"
+additional_redirect_urls = [
+  "http://127.0.0.1:3000/**",
+  "http://localhost:3000/**"
+]
+
+[db]
+shadow_port = 54320
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[storage]
+enabled = true
+file_size_limit = "500MiB"
+
+[storage.buckets.richo-digital-deliveries]
+public = false
+file_size_limit = "500MiB"
+allowed_mime_types = [
+  "application/pdf",
+  "application/zip",
+  "application/octet-stream",
+  "text/*"
+]
+objects_path = "./richo-digital-deliveries"

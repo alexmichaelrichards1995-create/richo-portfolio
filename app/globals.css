@@ -1,0 +1,160 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  color-scheme: dark;
+  --background: oklch(0.105 0.012 265);
+  --foreground: oklch(0.985 0.002 247);
+  --card: oklch(0.145 0.014 265);
+  --card-foreground: oklch(0.985 0.002 247);
+  --popover: oklch(0.145 0.014 265);
+  --popover-foreground: oklch(0.985 0.002 247);
+  --primary: oklch(0.69 0.17 265);
+  --primary-foreground: oklch(0.12 0.02 265);
+  --secondary: oklch(0.22 0.018 265);
+  --secondary-foreground: oklch(0.985 0.002 247);
+  --muted: oklch(0.20 0.016 265);
+  --muted-foreground: oklch(0.70 0.018 255);
+  --accent: oklch(0.24 0.025 265);
+  --accent-foreground: oklch(0.985 0.002 247);
+  --destructive: oklch(0.62 0.22 26);
+  --border: oklch(0.31 0.018 265);
+  --input: oklch(0.31 0.018 265);
+  --ring: oklch(0.69 0.17 265);
+  --radius: 0.625rem;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", "Geist Mono Fallback", ui-monospace, monospace;
+  --radius-sm: calc(var(--radius) * 0.75);
+  --radius-md: calc(var(--radius) * 0.875);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+}
+
+* {
+  border-color: var(--border);
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Geist", "Geist Fallback", ui-sans-serif, system-ui, sans-serif;
+}
+
+.shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+  background: radial-gradient(circle at 20% 0%, rgba(90, 120, 255, 0.18), transparent 34rem);
+}
+
+.hero {
+  width: min(960px, 100%);
+  padding: 48px;
+  border: 1px solid color-mix(in oklab, white 11%, transparent);
+  border-radius: 28px;
+  background: color-mix(in oklab, var(--card) 90%, transparent);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.35);
+}
+
+.eyebrow {
+  margin: 0 0 16px;
+  font-size: 0.78rem;
+  letter-spacing: 0.22em;
+  font-weight: 700;
+  color: #aebcff;
+}
+
+h1 {
+  margin: 0;
+  max-width: 760px;
+  font-size: clamp(2.4rem, 7vw, 5.4rem);
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.lede {
+  max-width: 760px;
+  margin: 24px 0 0;
+  font-size: 1.08rem;
+  line-height: 1.75;
+  color: #c5cad5;
+}
+
+.statusGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 34px;
+}
+
+.statusCard,
+.notice {
+  border: 1px solid color-mix(in oklab, white 10%, transparent);
+  background: color-mix(in oklab, white 3.5%, transparent);
+}
+
+.statusCard {
+  display: grid;
+  gap: 8px;
+  padding: 20px;
+  border-radius: 18px;
+}
+
+.statusCard span {
+  color: #8d95a5;
+  font-size: 0.82rem;
+}
+
+.statusCard strong {
+  font-size: 1rem;
+}
+
+.notice {
+  margin-top: 18px;
+  padding: 18px 20px;
+  border-radius: 16px;
+  color: #abb2c0;
+  line-height: 1.55;
+}
+
+@media (max-width: 720px) {
+  .hero {
+    padding: 30px 22px;
+  }
+
+  .statusGrid {
+    grid-template-columns: 1fr;
+  }
+}

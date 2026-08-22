@@ -1,0 +1,315 @@
+name: Commerce Marketplace Reconciliation CI
+
+on:
+  push:
+    branches:
+      - agent/integrate-commerce-marketplace
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'components/**'
+      - 'lib/**'
+      - 'supabase/**'
+      - 'github-app/**'
+      - 'db/**'
+      - 'migrations/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'marketplace_webhook_handler.js'
+      - 'subscriptions_service.js'
+      - 'stripe_connect.js'
+      - 'stripe_integration.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'github-app/package.json'
+      - 'github-app/package-lock.json'
+      - '.env.example'
+      - 'INTEGRATION_COMMERCE_MARKETPLACE.md'
+      - '.github/workflows/integration-reconciliation-ci.yml'
+      - '.github/workflows/next-supabase-foundation-ci.yml'
+      - '.github/workflows/controlled-commerce-ci.yml'
+      - '.github/workflows/supabase-database-ci.yml'
+      - '.github/workflows/github-app-ci.yml'
+
+concurrency:
+  group: integration-reconciliation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  customer-commerce:
+    name: Customer commerce + controlled purchase
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      stripe-mock:
+        image: stripe/stripe-mock:v0.202.0
+        ports:
+          - 12111:12111
+    env:
+      STRIPE_MODE: test
+      STRIPE_RESTRICTED_KEY: sk_test_richo_integration_ci_only
+      STRIPE_WEBHOOK_SECRET: whsec_richo_integration_ci_only
+      STRIPE_TEST_MOCK_ENABLED: 'true'
+      STRIPE_TEST_MOCK_HOST: 127.0.0.1
+      STRIPE_TEST_MOCK_PORT: '12111'
+      RICHO_LIVE_PAYMENTS_ENABLED: 'false'
+      SITE_URL: http://127.0.0.1:3000
+      RICHO_MARKETPLACE_CONNECT_ENABLED: 'false'
+      RICHO_LIVE_PAYOUTS_ENABLED: 'false'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root dependencies from lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Start local Supabase and apply committed migrations and seed
+        shell: bash
+        run: |
+          for attempt in 1 2 3; do
+            if npx supabase start; then
+              exit 0
+            fi
+            npx supabase stop --no-backup || true
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
+
+      - name: Seed private delivery objects
+        run: npx supabase seed buckets
+
+      - name: Run database contracts
+        run: npx supabase test db
+
+      - name: Export local Supabase credentials
+        shell: bash
+        run: |
+          npx supabase status -o env > /tmp/richo-supabase.env
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          values = {}
+          for raw in Path('/tmp/richo-supabase.env').read_text().splitlines():
+              line = raw.strip()
+              if not line or line.startswith('#') or '=' not in line:
+                  continue
+              key, value = line.split('=', 1)
+              values[key.strip()] = value.strip().strip('"').strip("'")
+
+          def require(*names):
+              for name in names:
+                  value = values.get(name)
+                  if value:
+                      return value
+              raise SystemExit(f'Missing Supabase status value: {names}')
+
+          runtime = {
+              'NEXT_PUBLIC_SUPABASE_URL': require('API_URL', 'SUPABASE_URL'),
+              'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': require('ANON_KEY', 'PUBLISHABLE_KEY'),
+              'SUPABASE_SERVICE_ROLE_KEY': require('SERVICE_ROLE_KEY', 'SECRET_KEY'),
+          }
+
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
+              for key, value in runtime.items():
+                  env_file.write(f'{key}={value}\n')
+          PY
+          rm -f /tmp/richo-supabase.env
+
+      - name: Cross-system boundary contract
+        run: npm run test:integration-boundaries
+
+      - name: Billing and Storage security contracts
+        run: npm run test:billing
+
+      - name: Stripe mock request integration
+        run: npm run test:stripe-mock
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Start production application locally
+        shell: bash
+        run: |
+          npm run start > /tmp/richo-next.log 2>&1 &
+          echo $! > /tmp/richo-next.pid
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/richo-next.log
+          exit 1
+
+      - name: Controlled Pilot purchase
+        run: node tests/controlled-test-purchase.mjs
+
+      - name: Show application log on failure
+        if: failure()
+        run: cat /tmp/richo-next.log || true
+
+      - name: Stop application
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/richo-next.pid ]; then
+            kill "$(cat /tmp/richo-next.pid)" || true
+          fi
+
+      - name: Stop local Supabase
+        if: always()
+        run: npx supabase stop --no-backup
+
+  canonical-marketplace:
+    name: Canonical GitHub App Marketplace
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: richo_marketplace
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d richo_marketplace"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: github-app
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/richo_marketplace
+      DATABASE_SSL: 'false'
+      GITHUB_WEBHOOK_SECRET: integration-webhook-secret
+      SESSION_SECRET: integration-session-secret-32-characters-minimum
+      GITHUB_APP_ID: '123456'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: github-app/package-lock.json
+
+      - name: Install dependencies from lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Apply canonical Marketplace migrations as explicit release step
+        run: npm run migrate
+
+      - name: Syntax and integration checks
+        run: npm run check
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Build service container
+        run: docker build -t richo-github-app:integration .
+
+      - name: Smoke-test exact service container
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run --rm -d \
+            --name richo-github-app-smoke \
+            --network host \
+            -e PORT=3218 \
+            -e PUBLIC_BASE_URL=http://127.0.0.1:3218 \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e DATABASE_SSL=false \
+            -e GITHUB_WEBHOOK_SECRET="$GITHUB_WEBHOOK_SECRET" \
+            -e SESSION_SECRET="$SESSION_SECRET" \
+            -e GITHUB_APP_ID="$GITHUB_APP_ID" \
+            richo-github-app:integration
+
+          cleanup() {
+            docker logs richo-github-app-smoke || true
+            docker stop richo-github-app-smoke >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          test "$(docker inspect --format '{{.Config.User}}' richo-github-app-smoke)" = "node"
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3218/health/live > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs richo-github-app-smoke
+          exit 1
+
+  legacy-marketplace-compatibility:
+    name: Legacy Marketplace compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: richo_legacy_marketplace
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d richo_legacy_marketplace"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      NODE_ENV: test
+      LEGACY_MARKETPLACE_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/richo_legacy_marketplace
+      ALLOW_FILE_STORE: 'false'
+      RICHO_MARKETPLACE_CONNECT_ENABLED: 'false'
+      RICHO_LIVE_PAYOUTS_ENABLED: 'false'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install root dependencies from lockfile
+        run: npm ci --no-audit --no-fund
+
+      - name: Apply legacy-only migrations
+        run: bash scripts/run_migrations.sh
+
+      - name: Run compatibility suite without production credentials
+        run: npm run test:legacy-marketplace
+
+      - name: Re-run cross-system boundaries from compatibility environment
+        run: npm run test:integration-boundaries

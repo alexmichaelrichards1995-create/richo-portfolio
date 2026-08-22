@@ -1,20 +1,19 @@
-﻿#!/usr/bin/env bash
-# Apply SQL migration files in migrations/ to the provided DATABASE_URL
-# Usage: ./scripts/run_migrations.sh <DATABASE_URL>
+#!/usr/bin/env bash
+# Apply root legacy Marketplace SQL migrations only to the dedicated legacy DB.
+# Usage: LEGACY_MARKETPLACE_DATABASE_URL=postgres://... ./scripts/run_migrations.sh
 
 set -euo pipefail
-DB_URL=${1:-${DATABASE_URL:-}}
+DB_URL=${LEGACY_MARKETPLACE_DATABASE_URL:-}
 if [ -z "$DB_URL" ]; then
-  echo "Usage: $0 <DATABASE_URL> or set DATABASE_URL env var"
+  echo "LEGACY_MARKETPLACE_DATABASE_URL is required"
   exit 1
 fi
 
 for f in migrations/*.sql; do
   if [ -f "$f" ]; then
     echo "Applying $f"
-    psql "$DB_URL" -f "$f"
+    psql "$DB_URL" -v ON_ERROR_STOP=1 -f "$f"
   fi
 done
 
-echo "Migrations applied."
-
+echo "Legacy Marketplace migrations applied."

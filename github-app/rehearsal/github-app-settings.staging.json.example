@@ -1,0 +1,32 @@
+{
+  "status": "TEMPLATE_ONLY_NO_EXTERNAL_MUTATION",
+  "environment": "staging",
+  "homepage_url": "https://STAGING_HOST/",
+  "oauth_callback_url": "https://STAGING_HOST/auth/github/callback",
+  "webhook_url": "https://STAGING_HOST/webhooks/github",
+  "webhook_active": true,
+  "repository_permissions": {
+    "metadata": "read",
+    "pull_requests": "read",
+    "checks": "write"
+  },
+  "subscribed_events": [
+    "installation",
+    "pull_request",
+    "marketplace_purchase"
+  ],
+  "optional_events_not_enabled_by_default": [
+    "push",
+    "issues"
+  ],
+  "prohibited_default_permissions": [
+    "organization_administration",
+    "administration"
+  ],
+  "notes": [
+    "Replace STAGING_HOST only after staging resource provisioning is separately approved.",
+    "Use staging/test GitHub App credentials only.",
+    "Do not reuse production callback, webhook, private-key, OAuth client-secret, session-secret, or admin-token material.",
+    "Marketplace publisher/listing approval is outside this rehearsal package and is not implied by this template."
+  ]
+}

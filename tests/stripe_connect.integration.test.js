@@ -1,20 +1,43 @@
-// Integration test for stripe_connect — uses stub path when STRIPE_API_KEY not set
-// Run: node tests/stripe_connect.integration.test.js
+// Integration test for legacy Stripe Connect safety behavior.
+// No network calls or fake connected-account IDs are permitted in this path.
 
 (async () => {
   try {
+    delete process.env.STRIPE_CONNECT_SECRET_KEY;
+    delete process.env.RICHO_MARKETPLACE_CONNECT_ENABLED;
+    delete process.env.RICHO_LIVE_PAYOUTS_ENABLED;
+
     const stripeConnect = require('../stripe_connect');
-    const envKey = process.env.STRIPE_API_KEY;
     const org = { accountId: 12345, login: 'acme', email: 'devnull@example.com' };
 
-    const res = await stripeConnect.createConnectAccount(org);
-    if (!res || !res.accountId) throw new Error('createConnectAccount did not return accountId');
+    const account = await stripeConnect.createConnectAccount(org);
+    if (!account || account.connected !== false || account.accountId !== null || account.state !== 'UNCONFIGURED') {
+      throw new Error('unconfigured Stripe Connect must return an explicit non-connected state');
+    }
 
-    // executePayout should return scheduled:false when below threshold
-    const payout = await stripeConnect.executePayout('2026-06', 10000, res.accountId, { minPayoutCents: 50000 });
-    if (payout.scheduled) throw new Error('payout scheduled unexpectedly');
+    if (stripeConnect.connectEnabled() !== false || stripeConnect.payoutsEnabled() !== false) {
+      throw new Error('Marketplace Connect and payout gates must default to disabled');
+    }
 
-    console.log('OK: stripe_connect integration (stub) passed', { STRIPE_API_KEY: !!envKey });
+    const belowThreshold = await stripeConnect.executePayout('2026-06', 10000, null, {
+      minPayoutCents: 50000,
+    });
+    if (belowThreshold.success !== false || belowThreshold.scheduled !== false) {
+      throw new Error('below-threshold payout should remain unscheduled');
+    }
+
+    const unconfiguredPayout = await stripeConnect.executePayout('2026-06', 100000, null, {
+      minPayoutCents: 50000,
+    });
+    if (
+      unconfiguredPayout.success !== false ||
+      unconfiguredPayout.scheduled !== false ||
+      unconfiguredPayout.state !== 'UNCONFIGURED'
+    ) {
+      throw new Error('payout must fail closed when Stripe Connect is unconfigured');
+    }
+
+    console.log('OK: Stripe Connect and payouts default to fail-closed states');
     process.exit(0);
   } catch (err) {
     console.error('FAILED', err && err.message);

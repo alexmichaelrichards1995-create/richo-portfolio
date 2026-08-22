@@ -1,0 +1,104 @@
+{
+  "schema_version": 1,
+  "status": "TEMPLATE_ONLY_NO_EXECUTION",
+  "environment": "staging",
+  "provider": {
+    "candidate": "render",
+    "region": "singapore",
+    "resource_creation_approved": false,
+    "spend_approved": false,
+    "spend_cap_aud": 0,
+    "production_use_approved": false
+  },
+  "source": {
+    "branch": "agent/integrate-commerce-marketplace",
+    "approved_source_sha": "__SET_AFTER_FINAL_CI__",
+    "approved_image_digest": "__SET_AFTER_FINAL_CI__",
+    "require_exact_source_match": true,
+    "require_exact_image_match": true,
+    "invalidate_approval_on_source_change": true
+  },
+  "service": {
+    "runtime": "oci-container",
+    "node_major": 22,
+    "instances": 1,
+    "scale_to_zero": false,
+    "auto_deploy": false,
+    "health_live_path": "/health/live",
+    "health_ready_path": "/health/ready",
+    "admin_ready_path": "/admin/health/ready",
+    "migration_command": "npm run migrate",
+    "start_command": "npm start"
+  },
+  "database": {
+    "dedicated_marketplace_database": true,
+    "customer_supabase_reuse_allowed": false,
+    "legacy_database_reuse_allowed": false,
+    "public_ingress_allowed": false,
+    "backup_required_before_migration": true,
+    "restore_drill_required": true
+  },
+  "github_app": {
+    "homepage_url": "https://STAGING_HOST",
+    "oauth_callback_url": "https://STAGING_HOST/auth/github/callback",
+    "webhook_url": "https://STAGING_HOST/webhooks/github",
+    "permissions": {
+      "metadata": "read",
+      "pull_requests": "read",
+      "checks": "write"
+    },
+    "events": [
+      "installation",
+      "pull_request",
+      "marketplace_purchase"
+    ],
+    "external_configuration_change_approved": false
+  },
+  "secret_references": [
+    { "name": "DATABASE_URL", "reference": "__STAGING_SECRET_REFERENCE__", "value_in_manifest": false },
+    { "name": "GITHUB_APP_ID", "reference": "__STAGING_SECRET_REFERENCE__", "value_in_manifest": false },
+    { "name": "GITHUB_CLIENT_ID", "reference": "__STAGING_SECRET_REFERENCE__", "value_in_manifest": false },
+    { "name": "GITHUB_CLIENT_SECRET", "reference": "__STAGING_SECRET_REFERENCE__", "value_in_manifest": false },
+    { "name": "GITHUB_WEBHOOK_SECRET", "reference": "__STAGING_SECRET_REFERENCE__", "value_in_manifest": false },
+    { "name": "GITHUB_PRIVATE_KEY_B64", "reference": "__STAGING_SECRET_REFERENCE__", "value_in_manifest": false },
+    { "name": "SESSION_SECRET", "reference": "__STAGING_SECRET_REFERENCE__", "value_in_manifest": false },
+    { "name": "ADMIN_TOKEN", "reference": "__STAGING_SECRET_REFERENCE__", "value_in_manifest": false }
+  ],
+  "owner_gates": {
+    "approve_staging_resource_creation": false,
+    "approve_staging_spend": false,
+    "approve_staging_secret_installation": false,
+    "approve_database_migration": false,
+    "approve_github_app_callback_webhook_change": false,
+    "approve_staging_smoke_rehearsal": false,
+    "approve_rollback_drill": false,
+    "approve_any_production_promotion": false
+  },
+  "execution_sequence": [
+    { "id": "STG-ACT-001", "action": "verify_exact_source_and_image", "mutating": false, "receipt": "RCP-STG-002" },
+    { "id": "STG-ACT-002", "action": "verify_owner_approval_scope_and_expiry", "mutating": false, "receipt": "RCP-STG-001" },
+    { "id": "STG-ACT-003", "action": "provision_dedicated_staging_postgresql", "mutating": true, "gate": "approve_staging_resource_creation", "receipt": "RCP-STG-001" },
+    { "id": "STG-ACT-004", "action": "provision_single_staging_oci_service", "mutating": true, "gate": "approve_staging_resource_creation", "receipt": "RCP-STG-001" },
+    { "id": "STG-ACT-005", "action": "install_staging_secret_references", "mutating": true, "gate": "approve_staging_secret_installation", "receipt": "RCP-STG-001" },
+    { "id": "STG-ACT-006", "action": "capture_pre_migration_backup", "mutating": false, "receipt": "RCP-STG-003" },
+    { "id": "STG-ACT-007", "action": "apply_marketplace_migrations_once", "mutating": true, "gate": "approve_database_migration", "receipt": "RCP-STG-003" },
+    { "id": "STG-ACT-008", "action": "start_exact_approved_oci_image", "mutating": true, "gate": "approve_staging_resource_creation", "receipt": "RCP-STG-002" },
+    { "id": "STG-ACT-009", "action": "verify_liveness_and_minimal_public_readiness", "mutating": false, "receipt": "RCP-STG-004" },
+    { "id": "STG-ACT-010", "action": "apply_staging_github_app_callback_and_webhook_urls", "mutating": true, "gate": "approve_github_app_callback_webhook_change", "receipt": "RCP-STG-005" },
+    { "id": "STG-ACT-011", "action": "observe_signed_webhook_and_durable_job_receipts", "mutating": false, "receipt": "RCP-STG-005" },
+    { "id": "STG-ACT-012", "action": "observe_oauth_session_boundary", "mutating": false, "receipt": "RCP-STG-007" },
+    { "id": "STG-ACT-013", "action": "verify_logs_metrics_and_alert_visibility", "mutating": false, "receipt": "RCP-STG-008" },
+    { "id": "STG-ACT-014", "action": "perform_approved_restore_and_prior_image_rollback_drill", "mutating": true, "gate": "approve_rollback_drill", "receipt": "RCP-STG-009" },
+    { "id": "STG-ACT-015", "action": "verify_spend_cap_and_auto_deploy_remain_disabled", "mutating": false, "receipt": "RCP-STG-010" },
+    { "id": "STG-ACT-016", "action": "close_staging_rehearsal_without_production_promotion", "mutating": false, "receipt": "RCP-STG-010" }
+  ],
+  "hard_stops": {
+    "all_mutating_steps_blocked_by_default": true,
+    "production_promotion_blocked": true,
+    "live_payments_blocked": true,
+    "connect_blocked": true,
+    "payouts_blocked": true,
+    "dns_cutover_blocked": true,
+    "merge_blocked": true
+  }
+}

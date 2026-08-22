@@ -1,0 +1,70 @@
+# REFERENCE ONLY. This file is intentionally not named render.yaml.
+# It must not be synced or provisioned without explicit owner approval.
+
+services:
+  - type: web
+    name: richo-github-app-staging
+    runtime: docker
+    repo: https://github.com/alexmichaelrichards1995-create/richo-portfolio
+    branch: agent/integrate-commerce-marketplace
+    rootDir: github-app
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    region: singapore
+    autoDeployTrigger: off
+    numInstances: 1
+    healthCheckPath: /health/live
+    maxShutdownDelaySeconds: 60
+    preDeployCommand: npm run migrate
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      - key: PUBLIC_BASE_URL
+        sync: false
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: richo-marketplace-staging-db
+          property: connectionString
+
+      - key: DATABASE_SSL
+        value: "true"
+
+      - key: DATABASE_POOL_MAX
+        value: "5"
+
+      - key: GITHUB_APP_ID
+        sync: false
+
+      - key: GITHUB_CLIENT_ID
+        sync: false
+
+      - key: GITHUB_CLIENT_SECRET
+        sync: false
+
+      - key: GITHUB_WEBHOOK_SECRET
+        sync: false
+
+      - key: GITHUB_PRIVATE_KEY_B64
+        sync: false
+
+      - key: SESSION_SECRET
+        sync: false
+
+      - key: ADMIN_TOKEN
+        sync: false
+
+databases:
+  - name: richo-marketplace-staging-db
+    plan: basic-256mb
+    region: singapore
+    postgresMajorVersion: "16"
+    databaseName: richo_marketplace_staging
+    user: richo_marketplace_app
+    diskSizeGB: 5
+    storageAutoscalingEnabled: false
+    connectionPool: none
+    ipAllowList: []

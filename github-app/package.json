@@ -5,15 +5,21 @@
   "description": "R.I.C.H.O. GitHub App and Marketplace SaaS core",
   "type": "commonjs",
   "engines": {
-    "node": ">=22"
+    "node": ">=22 <23"
   },
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "start": "node src/hardened-entrypoint.js",
+    "migrate": "node scripts/migrate.js",
+    "dev": "node --watch src/hardened-entrypoint.js",
     "test": "node --test",
-    "check": "node --check src/server.js && node --test"
+    "rehearsal:validate": "node rehearsal/validate-rehearsal-package.mjs",
+    "approval:validate": "node approval/validate-staging-approval-packet.mjs",
+    "approval:dry-run": "node approval/generate-staging-dry-run.mjs",
+    "approval:verify-owner": "node approval/verify-owner-authorization.mjs",
+    "execution:validate": "node execution/validate-mock-execution-package.mjs",
+    "check": "node --check src/server.js && node --check src/hardened-entrypoint.js && node --check rehearsal/collect-staging-evidence.mjs && node --check rehearsal/collect-webhook-job-evidence.mjs && node --check rehearsal/collect-oauth-session-evidence.mjs && node --check approval/generate-staging-dry-run.mjs && node --check approval/validate-staging-approval-packet.mjs && node --check approval/verify-owner-authorization.mjs && node --check execution/ledger-contract.mjs && node --check execution/mock-ledger.mjs && node --check execution/local-ci-postgres-ledger.mjs && node --check execution/mock-adapters.mjs && node --check execution/mock-execution-controller.mjs && node --check execution/validate-mock-execution-package.mjs && node --check execution/ci-durable-ledger-race-worker.mjs && node rehearsal/validate-rehearsal-package.mjs && node approval/validate-staging-approval-packet.mjs && node execution/validate-mock-execution-package.mjs && node --test"
   },
   "dependencies": {
-    "pg": "^8.13.0"
+    "pg": "8.22.0"
   }
 }

@@ -1,0 +1,160 @@
+name: Controlled Commerce CI
+
+on:
+  push:
+    branches:
+      - agent/nextjs-supabase-foundation
+    paths:
+      - 'app/api/checkout/**'
+      - 'app/api/webhooks/stripe/**'
+      - 'app/api/entitlements/**'
+      - 'app/protected/**'
+      - 'lib/commerce/**'
+      - 'lib/stripe/**'
+      - 'lib/supabase/**'
+      - 'supabase/config.toml'
+      - 'supabase/seed.sql'
+      - 'supabase/richo-digital-deliveries/**'
+      - 'supabase/migrations/**'
+      - 'tests/controlled-test-purchase.mjs'
+      - 'package.json'
+      - '.github/workflows/controlled-commerce-ci.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'app/api/checkout/**'
+      - 'app/api/webhooks/stripe/**'
+      - 'app/api/entitlements/**'
+      - 'app/protected/**'
+      - 'lib/commerce/**'
+      - 'lib/stripe/**'
+      - 'lib/supabase/**'
+      - 'supabase/**'
+      - 'tests/controlled-test-purchase.mjs'
+      - 'package.json'
+      - '.github/workflows/controlled-commerce-ci.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-purchase:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'agent/integrate-commerce-marketplace' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      stripe-mock:
+        image: stripe/stripe-mock:v0.202.0
+        ports:
+          - 12111:12111
+    env:
+      STRIPE_MODE: test
+      STRIPE_RESTRICTED_KEY: sk_test_richo_controlled_ci_only
+      STRIPE_WEBHOOK_SECRET: whsec_richo_controlled_ci_only
+      STRIPE_TEST_MOCK_ENABLED: 'true'
+      STRIPE_TEST_MOCK_HOST: 127.0.0.1
+      STRIPE_TEST_MOCK_PORT: '12111'
+      RICHO_LIVE_PAYMENTS_ENABLED: 'false'
+      SITE_URL: http://127.0.0.1:3000
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Start local Supabase
+        run: npx supabase start
+
+      - name: Rebuild database and apply canonical seed
+        run: npx supabase db reset
+
+      - name: Seed private delivery bucket objects
+        run: npx supabase seed buckets
+
+      - name: Export local Supabase runtime credentials
+        shell: bash
+        run: |
+          npx supabase status -o env > /tmp/richo-supabase.env
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          values = {}
+          for raw in Path('/tmp/richo-supabase.env').read_text().splitlines():
+              line = raw.strip()
+              if not line or line.startswith('#') or '=' not in line:
+                  continue
+              key, value = line.split('=', 1)
+              values[key.strip()] = value.strip().strip('"').strip("'")
+
+          def require(*names):
+              for name in names:
+                  value = values.get(name)
+                  if value:
+                      return value
+              raise SystemExit(f'Missing Supabase status value: {names}')
+
+          runtime = {
+              'NEXT_PUBLIC_SUPABASE_URL': require('API_URL', 'SUPABASE_URL'),
+              'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY': require('ANON_KEY', 'PUBLISHABLE_KEY'),
+              'SUPABASE_SERVICE_ROLE_KEY': require('SERVICE_ROLE_KEY', 'SECRET_KEY'),
+          }
+
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
+              for key, value in runtime.items():
+                  env_file.write(f'{key}={value}\n')
+          PY
+          rm -f /tmp/richo-supabase.env
+
+      - name: Billing security contract
+        run: npm run test:billing
+
+      - name: Stripe mock request integration
+        run: npm run test:stripe-mock
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production application
+        run: npm run build
+
+      - name: Start production application locally
+        shell: bash
+        run: |
+          npm run start > /tmp/richo-next.log 2>&1 &
+          echo $! > /tmp/richo-next.pid
+          for attempt in $(seq 1 40); do
+            if curl --fail --silent http://127.0.0.1:3000/api/health > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/richo-next.log
+          exit 1
+
+      - name: Controlled Pilot test purchase
+        run: node tests/controlled-test-purchase.mjs
+
+      - name: Show application log on failure
+        if: failure()
+        run: cat /tmp/richo-next.log || true
+
+      - name: Stop application
+        if: always()
+        shell: bash
+        run: |
+          if [ -f /tmp/richo-next.pid ]; then
+            kill "$(cat /tmp/richo-next.pid)" || true
+          fi
+
+      - name: Stop local Supabase
+        if: always()
+        run: npx supabase stop --no-backup

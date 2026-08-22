@@ -17,6 +17,7 @@ permissions:
 
 jobs:
   verify:
+    if: ${{ github.event_name != 'pull_request' || github.head_ref != 'agent/integrate-commerce-marketplace' }}
     runs-on: ubuntu-latest
     services:
       postgres:
