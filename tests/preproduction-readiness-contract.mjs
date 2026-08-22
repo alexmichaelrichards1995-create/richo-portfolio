@@ -132,7 +132,7 @@ test('execution controller keeps mock action adapters while durable ledger is lo
   const durableLedger = await source('github-app/execution/local-ci-postgres-ledger.mjs')
   const durableSql = await source('github-app/execution/sql/001_local_ci_durable_ledger.sql')
   const durableTests = await source('github-app/test/durable-execution-ledger.test.mjs')
-  const raceWorker = await source('github-app/test/fixtures/durable-ledger-race-worker.mjs')
+  const raceWorker = await source('github-app/execution/ci-durable-ledger-race-worker.mjs')
   const validator = await source('github-app/execution/validate-mock-execution-package.mjs')
   const docs = await source('github-app/execution/EXECUTION_CONTROLLER.md')
   const packageJson = JSON.parse(await source('github-app/package.json'))
@@ -160,6 +160,7 @@ test('execution controller keeps mock action adapters while durable ledger is lo
 
   assert.match(packageJson.scripts['execution:validate'], /validate-mock-execution-package/)
   assert.match(packageJson.scripts.check, /execution\/local-ci-postgres-ledger\.mjs/)
+  assert.match(packageJson.scripts.check, /execution\/ci-durable-ledger-race-worker\.mjs/)
   assert.match(validator, /node:https\|node:http\|node:net\|node:dns\|node:tls/)
   assert.match(validator, /api\\\.render\\\.com\|api\\\.github\\\.com/)
 
