@@ -136,7 +136,7 @@ function receiptFor(v, actionId, summary) {
 }
 
 function runRaceWorker(v) {
-  const workerPath = fileURLToPath(new URL('./fixtures/durable-ledger-race-worker.mjs', import.meta.url))
+  const workerPath = fileURLToPath(new URL('../execution/ci-durable-ledger-race-worker.mjs', import.meta.url))
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [workerPath], {
       env: {
